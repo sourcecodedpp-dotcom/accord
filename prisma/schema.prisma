@@ -1,0 +1,149 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Participant {
+  id                   String            @id
+  type                 String            // "AI_AGENT" | "HUMAN_PRINCIPAL" | "AUTONOMOUS_DAO"
+  name                 String
+  walletAddress        String
+  publicKey            String?
+  endpointUrl          String?
+  bio                  String?
+  reputationScore      Float             @default(100.0)
+  settledVolumeUsdc    Float             @default(0.0)
+  bountiesCreatedCount Int               @default(0)
+  bountiesWonCount     Int               @default(0)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  createdBounties      Bounty[]          @relation("BountyCreator")
+  wonBounties          Bounty[]          @relation("BountyWinner")
+  competitionEntries   CompetitionEntry[]
+  submissions          Submission[]
+  reputationLogs       ReputationLog[]
+  verificationRuns     VerificationRun[]
+}
+
+model Bounty {
+  id                    String            @id
+  title                 String
+  description           String
+  acceptanceCriteria    String            // JSON serialized array of strings or rules
+  rewardUsdc            Float
+  creatorId             String
+  creator               Participant       @relation("BountyCreator", fields: [creatorId], references: [id])
+  creatorType           String            // "HUMAN_PRINCIPAL" | "AI_AGENT"
+  status                String            // "OPEN" | "IN_COMPETITION" | "EVALUATING" | "SETTLING" | "SETTLED" | "EXPIRED" | "CANCELLED"
+  competitionMode       String            @default("RACE_TO_FIRST_VALID") // "RACE_TO_FIRST_VALID" | "BEST_SCORE_DEADLINE" | "CONSENSUS_MULTI_AGENT"
+  deadline              DateTime
+  maxCompetitors        Int?
+  minReputationRequired Float             @default(0.0)
+  escrowStatus          String            @default("HELD_IN_ESCROW") // "PENDING_DEPOSIT" | "HELD_IN_ESCROW" | "RELEASED" | "REFUNDED"
+  escrowTxHash          String?
+  settlementTxHash      String?
+  winnerAgentId         String?
+  winnerAgent           Participant?      @relation("BountyWinner", fields: [winnerAgentId], references: [id])
+  metadata              String?           // JSON string for environment requirements, test fixtures, etc.
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  competitionEntries    CompetitionEntry[]
+  submissions           Submission[]
+  verificationRuns      VerificationRun[]
+  settlements           Settlement[]
+  reputationLogs        ReputationLog[]
+}
+
+model CompetitionEntry {
+  id          String      @id
+  bountyId    String
+  bounty      Bounty      @relation(fields: [bountyId], references: [id], onDelete: Cascade)
+  agentId     String
+  agent       Participant @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  status      String      @default("REGISTERED") // "REGISTERED" | "WORKING" | "SUBMITTED" | "WITHDRAWN" | "DISQUALIFIED"
+  stakeUsdc   Float       @default(0.0)
+  heartbeatAt DateTime    @default(now())
+  joinedAt    DateTime    @default(now())
+
+  @@unique([bountyId, agentId])
+}
+
+model Submission {
+  id               String            @id
+  bountyId         String
+  bounty           Bounty            @relation(fields: [bountyId], references: [id], onDelete: Cascade)
+  agentId          String
+  agent            Participant       @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  deliverableType  String            // "CODE_PR" | "DATA_ARTIFACT" | "RESEARCH_REPORT" | "API_ENDPOINT" | "SMART_CONTRACT"
+  deliverableUrl   String
+  contentHash      String            // SHA-256 hash of submission content
+  agentSignature   String?           // Cryptographic signature of contentHash
+  summary          String
+  executionTrace   String?           // JSON or string execution logs, test outputs
+  status           String            @default("PENDING_VERIFICATION") // "PENDING_VERIFICATION" | "VERIFYING" | "ACCEPTED" | "REJECTED" | "SUPERSEDED"
+  score            Float?
+  submittedAt      DateTime          @default(now())
+
+  verificationRuns VerificationRun[]
+  settlement       Settlement?
+}
+
+model VerificationRun {
+  id              String       @id
+  submissionId    String
+  submission      Submission   @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  bountyId        String
+  bounty          Bounty       @relation(fields: [bountyId], references: [id], onDelete: Cascade)
+  verifierAgentId String?
+  verifierAgent   Participant? @relation(fields: [verifierAgentId], references: [id])
+  verifierType    String       // "LLM_RUBRIC_EVALUATOR" | "DETERMINISTIC_SANDBOX" | "MULTI_AGENT_CONSENSUS"
+  score           Float        // 0.0 - 100.0
+  verdict         String       // "PASS" | "FAIL" | "REQUIRES_HUMAN_INTERVENTION"
+  rubricBreakdown String       // JSON string
+  reasoning       String
+  verifiedAt      DateTime     @default(now())
+}
+
+model Settlement {
+  id             String      @id
+  bountyId       String
+  bounty         Bounty      @relation(fields: [bountyId], references: [id])
+  submissionId   String      @unique
+  submission     Submission  @relation(fields: [submissionId], references: [id])
+  agentId        String
+  amountUsdc     Float
+  feeUsdc        Float       @default(0.0)
+  escrowContract String?
+  txHash         String
+  status         String      // "INITIATED" | "CONFIRMED" | "FAILED"
+  settledAt      DateTime    @default(now())
+}
+
+model ReputationLog {
+  id            String      @id
+  agentId       String
+  agent         Participant @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  bountyId      String?
+  bounty        Bounty?     @relation(fields: [bountyId], references: [id])
+  delta         Float
+  previousScore Float
+  newScore      Float
+  reason        String
+  metadata      String?     // JSON string
+  createdAt     DateTime    @default(now())
+}
+
+model ProtocolAuditLog {
+  id         String   @id
+  eventType  String
+  entityType String
+  entityId   String
+  payload    String   // JSON
+  createdAt  DateTime @default(now())
+}

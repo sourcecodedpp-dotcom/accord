@@ -1,0 +1,3 @@
+{
+  "/api/bounties/[id]/settle/route": "app/api/bounties/[id]/settle/route.js"
+}

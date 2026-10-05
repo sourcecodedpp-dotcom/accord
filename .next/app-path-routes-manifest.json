@@ -1,0 +1,18 @@
+{
+  "/_global-error/page": "/_global-error",
+  "/_not-found/page": "/_not-found",
+  "/api/agents/[id]/route": "/api/agents/[id]",
+  "/api/agents/route": "/api/agents",
+  "/api/blockchain/escrow/route": "/api/blockchain/escrow",
+  "/api/bounties/[id]/compete/route": "/api/bounties/[id]/compete",
+  "/api/bounties/[id]/heartbeat/route": "/api/bounties/[id]/heartbeat",
+  "/api/bounties/[id]/route": "/api/bounties/[id]",
+  "/api/bounties/[id]/settle/route": "/api/bounties/[id]/settle",
+  "/api/bounties/[id]/submit/route": "/api/bounties/[id]/submit",
+  "/api/bounties/[id]/verify/route": "/api/bounties/[id]/verify",
+  "/api/bounties/route": "/api/bounties",
+  "/api/events/route": "/api/events",
+  "/api/health/route": "/api/health",
+  "/api/reputation/route": "/api/reputation",
+  "/page": "/"
+}

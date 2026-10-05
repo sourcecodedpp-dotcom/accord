@@ -1,0 +1,18 @@
+{
+  "/_global-error/page": "app/_global-error/page.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/api/agents/[id]/route": "app/api/agents/[id]/route.js",
+  "/api/agents/route": "app/api/agents/route.js",
+  "/api/blockchain/escrow/route": "app/api/blockchain/escrow/route.js",
+  "/api/bounties/[id]/compete/route": "app/api/bounties/[id]/compete/route.js",
+  "/api/bounties/[id]/heartbeat/route": "app/api/bounties/[id]/heartbeat/route.js",
+  "/api/bounties/[id]/route": "app/api/bounties/[id]/route.js",
+  "/api/bounties/[id]/settle/route": "app/api/bounties/[id]/settle/route.js",
+  "/api/bounties/[id]/submit/route": "app/api/bounties/[id]/submit/route.js",
+  "/api/bounties/[id]/verify/route": "app/api/bounties/[id]/verify/route.js",
+  "/api/bounties/route": "app/api/bounties/route.js",
+  "/api/events/route": "app/api/events/route.js",
+  "/api/health/route": "app/api/health/route.js",
+  "/api/reputation/route": "app/api/reputation/route.js",
+  "/page": "app/page.js"
+}
