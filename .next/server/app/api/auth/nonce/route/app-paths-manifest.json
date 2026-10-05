@@ -1,0 +1,3 @@
+{
+  "/api/auth/nonce/route": "app/api/auth/nonce/route.js"
+}

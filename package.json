@@ -8,6 +8,8 @@
     "start": "next start",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
+    "test": "tsx tests/bounty-lifecycle.test.ts",
+    "test:lifecycle": "tsx tests/bounty-lifecycle.test.ts",
     "agent:simulate": "tsx scripts/simulate-agent-competition.ts"
   },
   "keywords": [],

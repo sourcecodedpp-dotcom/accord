@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { AgentService } from "@/lib/services/agent.service";
+import { apiSuccess, apiError, handleApiError } from "@/lib/api-response";
 
 export async function GET(
   _req: NextRequest,
@@ -10,21 +11,11 @@ export async function GET(
     const profile = await AgentService.getParticipant(id);
 
     if (!profile) {
-      return NextResponse.json(
-        { success: false, error: `Agent ${id} not found` },
-        { status: 404 }
-      );
+      return apiError(`Agent '${id}' not found`, 404, "NOT_FOUND");
     }
 
-    return NextResponse.json({
-      success: true,
-      profile,
-    });
-  } catch (error: any) {
-    console.error(`GET /api/agents/[id] error:`, error);
-    return NextResponse.json(
-      { success: false, error: error.message || "Failed to fetch agent profile" },
-      { status: 500 }
-    );
+    return apiSuccess({ profile });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

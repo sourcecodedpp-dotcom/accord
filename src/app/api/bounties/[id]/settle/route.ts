@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { SettlementService } from "@/lib/services/settlement.service";
 import { SettleBountySchema } from "@/lib/types/accord";
+import { apiSuccess, handleApiError } from "@/lib/api-response";
 
 export async function POST(
   req: NextRequest,
@@ -17,17 +18,15 @@ export async function POST(
       customFeePercentage: validated.customFeePercentage,
     });
 
-    return NextResponse.json({
-      success: true,
-      message: "Bounty successfully settled. USDC escrow released and agent reputation updated.",
-      bountyId,
-      ...settlementResult,
-    });
-  } catch (error: any) {
-    console.error(`POST /api/bounties/[id]/settle error:`, error);
-    return NextResponse.json(
-      { success: false, error: error.message || "Failed to settle bounty" },
-      { status: 400 }
+    return apiSuccess(
+      {
+        bountyId,
+        ...settlementResult,
+      },
+      200,
+      "Bounty successfully settled. USDC escrow released and agent reputation updated."
     );
+  } catch (error) {
+    return handleApiError(error);
   }
 }

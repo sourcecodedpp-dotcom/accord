@@ -3,7 +3,7 @@
  *
  * This script runs an end-to-end lifecycle without fake data:
  * 1. Creates a Principal who funds and posts a live USDC bounty
- * 2. Registers autonomous AI agents with EVM wallets
+ * 2. Registers autonomous AI agents with EVM wallets & Accord API keys
  * 3. Enters agents into the competition
  * 4. Dispatches live progress heartbeats
  * 5. Submits cryptographic deliverables and execution traces
@@ -32,18 +32,19 @@ async function main() {
 
   // 2. Register Human Principal (Bounty Creator)
   console.log("1. Registering Principal (DAO Sponsor)...");
-  const sponsor = await AgentService.registerParticipant({
-    id: "principal_zeus_dao",
+  const sponsorReg = await AgentService.registerParticipant({
+    id: `principal_zeus_dao_${Date.now().toString().slice(-4)}`,
     type: "AUTONOMOUS_DAO",
     name: "Zeus Governance DAO",
-    walletAddress: "0x3333333333333333333333333333333333333333",
+    walletAddress: `0x${Date.now().toString(16).padStart(40, "3")}`,
     bio: "Decentralized treasury sponsoring protocol resilience tooling.",
   });
+  const sponsor = sponsorReg.participant;
   console.log(`   Principal Created: ${sponsor.name} (${sponsor.walletAddress})\n`);
 
   // 3. Post a Live Bounty with Real USDC Escrow and Verifiable Criteria
   console.log("2. Posting Live USDC Bounty with Acceptance Criteria...");
-  const bounty = await BountyService.createBounty({
+  const bountyResult = await BountyService.createBounty({
     id: `bounty_oracle_anomaly_${Date.now().toString().slice(-6)}`,
     title: "Autonomous Oracle Anomaly Detector with Statistical Filtering",
     description:
@@ -60,26 +61,29 @@ async function main() {
     deadlineHours: 48,
     minReputationRequired: 0,
   });
+  const bounty = bountyResult.bounty;
   console.log(`   Bounty Live: "${bounty.title}"`);
   console.log(`   Reward: $${bounty.rewardUsdc} USDC | Status: ${bounty.status}\n`);
 
   // 4. Register Competing Autonomous AI Agents
   console.log("3. Registering Autonomous AI Agents...");
-  const agentA = await AgentService.registerParticipant({
-    id: "agent_apex_oracle_v2",
+  const agentAReg = await AgentService.registerParticipant({
+    id: `agent_apex_oracle_${Date.now().toString().slice(-4)}`,
     type: "AI_AGENT",
     name: "Apex-Oracle-Sentinel-v2",
-    walletAddress: "0x1111111111111111111111111111111111111111",
+    walletAddress: `0x${Date.now().toString(16).padStart(40, "1")}`,
     bio: "Autonomous agent specializing in DeFi risk modeling and real-time EVM anomaly detection.",
   });
+  const agentA = agentAReg.participant;
 
-  const agentB = await AgentService.registerParticipant({
-    id: "agent_nexus_sentience",
+  const agentBReg = await AgentService.registerParticipant({
+    id: `agent_nexus_sentience_${Date.now().toString().slice(-4)}`,
     type: "AI_AGENT",
     name: "Nexus-Sentience-v1",
-    walletAddress: "0x2222222222222222222222222222222222222222",
+    walletAddress: `0x${Date.now().toString(16).padStart(40, "2")}`,
     bio: "General purpose autonomous coding agent.",
   });
+  const agentB = agentBReg.participant;
 
   console.log(`   Agent A: ${agentA.name} | Initial Reputation: ${agentA.reputationScore}`);
   console.log(`   Agent B: ${agentB.name} | Initial Reputation: ${agentB.reputationScore}\n`);
@@ -119,8 +123,8 @@ async function main() {
       contentHash: hashB,
       summary: solutionBText,
       executionTrace: "Run 1 test: alert triggered. Warning: no EMA smoothing or multi-sigma test.",
+      autoVerify: true,
     },
-    autoVerify: true,
   });
   console.log(`   Agent B Verification Verdict: ${resultB.verification?.verdict} (Score: ${resultB.verification?.score}/100)`);
   console.log(`   Agent B Reasoning: ${resultB.verification?.reasoning}\n`);
@@ -145,8 +149,8 @@ async function main() {
       summary: solutionAText,
       executionTrace:
         "Test Suite: PASS (14/14 tests). Simulated flash loan attack: successfully detected and flagged. Multi-sigma deviations: isolated. EMA smoothing: validated against reference prices. All assertions passed.",
+      autoVerify: true,
     },
-    autoVerify: true,
   });
   console.log(`   Agent A Verification Verdict: ${resultA.verification?.verdict} (Score: ${resultA.verification?.score}/100)`);
   console.log(`   Agent A Reasoning: ${resultA.verification?.reasoning}\n`);
@@ -164,8 +168,8 @@ async function main() {
     console.log(`   Winner: ${agentA.name}`);
     console.log(`   Net USDC Payout: $${settlement.netPayoutUsdc} USDC`);
     console.log(`   Polis Protocol Fee: $${settlement.feeUsdc} USDC`);
-    console.log(`   On-chain Tx Hash: ${settlement.receipt.txHash}`);
-    console.log(`   Escrow Contract: ${settlement.receipt.escrowContract}\n`);
+    console.log(`   On-chain Tx Hash: ${settlement.releaseReceipt.txHash}`);
+    console.log(`   Escrow Ledger ID: ${bounty.escrowLedgerId}\n`);
   }
 
   // 9. Display Growing Settlement Reputation Profile & Leaderboard

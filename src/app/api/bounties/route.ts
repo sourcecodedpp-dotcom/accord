@@ -1,35 +1,19 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { BountyService } from "@/lib/services/bounty.service";
-import { CreateBountySchema } from "@/lib/types/accord";
+import { CreateBountySchema, BountyQuerySchema } from "@/lib/types/accord";
+import { apiSuccess, handleApiError } from "@/lib/api-response";
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const status = searchParams.get("status") || undefined;
-    const minReward = searchParams.get("minReward") ? Number(searchParams.get("minReward")) : undefined;
-    const creatorId = searchParams.get("creatorId") || undefined;
-    const limit = searchParams.get("limit") ? Number(searchParams.get("limit")) : undefined;
-    const offset = searchParams.get("offset") ? Number(searchParams.get("offset")) : undefined;
+    const queryObj = Object.fromEntries(searchParams.entries());
+    const validatedQuery = BountyQuerySchema.parse(queryObj);
 
-    const bounties = await BountyService.listBounties({
-      status,
-      minReward,
-      creatorId,
-      limit,
-      offset,
-    });
+    const result = await BountyService.listBounties(validatedQuery);
 
-    return NextResponse.json({
-      success: true,
-      count: bounties.length,
-      bounties,
-    });
-  } catch (error: any) {
-    console.error("GET /api/bounties error:", error);
-    return NextResponse.json(
-      { success: false, error: error.message || "Failed to fetch bounties" },
-      { status: 500 }
-    );
+    return apiSuccess(result, 200, "Bounties retrieved successfully");
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
@@ -38,24 +22,14 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const validated = CreateBountySchema.parse(body);
 
-    const bounty = await BountyService.createBounty(validated);
+    const result = await BountyService.createBounty(validated);
 
-    return NextResponse.json(
-      {
-        success: true,
-        message: "Bounty created and live on Accord Polis Agora",
-        bounty,
-      },
-      { status: 201 }
+    return apiSuccess(
+      result,
+      201,
+      "Bounty created and escrow secured on the Accord Escrow Ledger"
     );
-  } catch (error: any) {
-    console.error("POST /api/bounties error:", error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: error.errors || error.message || "Invalid bounty creation payload",
-      },
-      { status: 400 }
-    );
+  } catch (error) {
+    return handleApiError(error);
   }
 }

@@ -47,6 +47,22 @@
       "namedRegex": "^/api/bounties/(?<nxtPid>[^/]+?)/compete(?:/)?$"
     },
     {
+      "page": "/api/bounties/[id]/competitors",
+      "regex": "^/api/bounties/([^/]+?)/competitors(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/bounties/(?<nxtPid>[^/]+?)/competitors(?:/)?$"
+    },
+    {
+      "page": "/api/bounties/[id]/escrow",
+      "regex": "^/api/bounties/([^/]+?)/escrow(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/bounties/(?<nxtPid>[^/]+?)/escrow(?:/)?$"
+    },
+    {
       "page": "/api/bounties/[id]/heartbeat",
       "regex": "^/api/bounties/([^/]+?)/heartbeat(?:/)?$",
       "routeKeys": {
@@ -55,12 +71,55 @@
       "namedRegex": "^/api/bounties/(?<nxtPid>[^/]+?)/heartbeat(?:/)?$"
     },
     {
+      "page": "/api/bounties/[id]/participate",
+      "regex": "^/api/bounties/([^/]+?)/participate(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/bounties/(?<nxtPid>[^/]+?)/participate(?:/)?$"
+    },
+    {
       "page": "/api/bounties/[id]/settle",
       "regex": "^/api/bounties/([^/]+?)/settle(?:/)?$",
       "routeKeys": {
         "nxtPid": "nxtPid"
       },
       "namedRegex": "^/api/bounties/(?<nxtPid>[^/]+?)/settle(?:/)?$"
+    },
+    {
+      "page": "/api/bounties/[id]/submissions",
+      "regex": "^/api/bounties/([^/]+?)/submissions(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/bounties/(?<nxtPid>[^/]+?)/submissions(?:/)?$"
+    },
+    {
+      "page": "/api/bounties/[id]/submissions/[submissionId]",
+      "regex": "^/api/bounties/([^/]+?)/submissions/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid",
+        "nxtPsubmissionId": "nxtPsubmissionId"
+      },
+      "namedRegex": "^/api/bounties/(?<nxtPid>[^/]+?)/submissions/(?<nxtPsubmissionId>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/bounties/[id]/submissions/[submissionId]/verification",
+      "regex": "^/api/bounties/([^/]+?)/submissions/([^/]+?)/verification(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid",
+        "nxtPsubmissionId": "nxtPsubmissionId"
+      },
+      "namedRegex": "^/api/bounties/(?<nxtPid>[^/]+?)/submissions/(?<nxtPsubmissionId>[^/]+?)/verification(?:/)?$"
+    },
+    {
+      "page": "/api/bounties/[id]/submissions/[submissionId]/verify",
+      "regex": "^/api/bounties/([^/]+?)/submissions/([^/]+?)/verify(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid",
+        "nxtPsubmissionId": "nxtPsubmissionId"
+      },
+      "namedRegex": "^/api/bounties/(?<nxtPid>[^/]+?)/submissions/(?<nxtPsubmissionId>[^/]+?)/verify(?:/)?$"
     },
     {
       "page": "/api/bounties/[id]/submit",
@@ -77,6 +136,14 @@
         "nxtPid": "nxtPid"
       },
       "namedRegex": "^/api/bounties/(?<nxtPid>[^/]+?)/verify(?:/)?$"
+    },
+    {
+      "page": "/api/reputation/agents/[agentId]",
+      "regex": "^/api/reputation/agents/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPagentId": "nxtPagentId"
+      },
+      "namedRegex": "^/api/reputation/agents/(?<nxtPagentId>[^/]+?)(?:/)?$"
     }
   ],
   "staticRoutes": [
@@ -105,6 +172,30 @@
       "namedRegex": "^/api/agents(?:/)?$"
     },
     {
+      "page": "/api/auth/login",
+      "regex": "^/api/auth/login(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/auth/login(?:/)?$"
+    },
+    {
+      "page": "/api/auth/me",
+      "regex": "^/api/auth/me(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/auth/me(?:/)?$"
+    },
+    {
+      "page": "/api/auth/nonce",
+      "regex": "^/api/auth/nonce(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/auth/nonce(?:/)?$"
+    },
+    {
+      "page": "/api/auth/register",
+      "regex": "^/api/auth/register(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/auth/register(?:/)?$"
+    },
+    {
       "page": "/api/blockchain/escrow",
       "regex": "^/api/blockchain/escrow(?:/)?$",
       "routeKeys": {},
@@ -123,6 +214,12 @@
       "namedRegex": "^/api/events(?:/)?$"
     },
     {
+      "page": "/api/events/history",
+      "regex": "^/api/events/history(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/events/history(?:/)?$"
+    },
+    {
       "page": "/api/health",
       "regex": "^/api/health(?:/)?$",
       "routeKeys": {},
@@ -133,6 +230,18 @@
       "regex": "^/api/reputation(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/reputation(?:/)?$"
+    },
+    {
+      "page": "/api/reputation/leaderboard",
+      "regex": "^/api/reputation/leaderboard(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/reputation/leaderboard(?:/)?$"
+    },
+    {
+      "page": "/api/reputation/logs",
+      "regex": "^/api/reputation/logs(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/reputation/logs(?:/)?$"
     }
   ],
   "dataRoutes": [],

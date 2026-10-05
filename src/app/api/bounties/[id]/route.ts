@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { BountyService } from "@/lib/services/bounty.service";
+import { apiSuccess, apiError, handleApiError } from "@/lib/api-response";
 
 export async function GET(
   _req: NextRequest,
@@ -10,21 +11,11 @@ export async function GET(
     const bounty = await BountyService.getBountyById(id);
 
     if (!bounty) {
-      return NextResponse.json(
-        { success: false, error: `Bounty with ID ${id} not found` },
-        { status: 404 }
-      );
+      return apiError(`Bounty '${id}' not found`, 404, "NOT_FOUND");
     }
 
-    return NextResponse.json({
-      success: true,
-      bounty,
-    });
-  } catch (error: any) {
-    console.error(`GET /api/bounties/[id] error:`, error);
-    return NextResponse.json(
-      { success: false, error: error.message || "Failed to retrieve bounty" },
-      { status: 500 }
-    );
+    return apiSuccess({ bounty });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

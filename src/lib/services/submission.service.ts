@@ -1,20 +1,18 @@
 import { db } from "../db";
 import { CreateSubmissionInput } from "../types/accord";
-import { BlockchainEscrowService } from "../blockchain/escrow";
 import { VerificationService } from "./verification.service";
 import { eventBus } from "./event.service";
 import crypto from "crypto";
 
 export class SubmissionService {
   /**
-   * Submits an autonomous agent's solution for a bounty, with cryptographic hashing and optional signature verification
+   * Submits an autonomous agent's solution for a bounty, with cryptographic hashing and verification
    */
   static async submitSolution(params: {
     bountyId: string;
     input: CreateSubmissionInput;
-    autoVerify?: boolean;
   }) {
-    const { bountyId, input, autoVerify = true } = params;
+    const { bountyId, input } = params;
 
     const bounty = await db.bounty.findUnique({
       where: { id: bountyId },
@@ -47,23 +45,7 @@ export class SubmissionService {
     });
 
     if (!entry) {
-      throw new Error(`Agent ${input.agentId} has not entered competition for bounty ${bountyId}`);
-    }
-
-    // If agentSignature is provided, verify against agent's EVM wallet address
-    if (input.agentSignature) {
-      const isSignatureValid = await BlockchainEscrowService.verifyAgentSignature({
-        agentAddress: agent.walletAddress as `0x${string}`,
-        signature: input.agentSignature as `0x${string}`,
-        contentHash: input.contentHash,
-        bountyId,
-        deliverableUrl: input.deliverableUrl,
-        timestamp: Date.now(),
-      });
-
-      if (!isSignatureValid) {
-        console.warn(`[SubmissionService] Agent signature failed verification for ${agent.name}`);
-      }
+      throw new Error(`Agent ${input.agentId} has not joined the competition for bounty ${bountyId}`);
     }
 
     const submissionId = `sub_${crypto.randomUUID()}`;
@@ -77,7 +59,7 @@ export class SubmissionService {
           deliverableType: input.deliverableType,
           deliverableUrl: input.deliverableUrl,
           contentHash: input.contentHash,
-          agentSignature: input.agentSignature || null,
+          accordSignature: input.accordSignature || null,
           summary: input.summary,
           executionTrace: input.executionTrace || null,
           status: "PENDING_VERIFICATION",
@@ -115,14 +97,27 @@ export class SubmissionService {
       submittedAt: submission.submittedAt,
     });
 
-    // If autoVerify is enabled, run AI verification pipeline
-    if (autoVerify) {
+    // If autoVerify is requested (default: true), run AI verification pipeline
+    if (input.autoVerify) {
       try {
         const verification = await VerificationService.verifySubmission({
           submissionId: submission.id,
         });
+        const refreshedSubmission = await db.submission.findUnique({
+          where: { id: submission.id },
+          include: {
+            agent: {
+              select: {
+                id: true,
+                name: true,
+                walletAddress: true,
+                reputationScore: true,
+              },
+            },
+          },
+        });
         return {
-          submission,
+          submission: refreshedSubmission || submission,
           verification,
         };
       } catch (err) {
@@ -134,7 +129,7 @@ export class SubmissionService {
   }
 
   /**
-   * Retrieves submissions for a specific bounty
+   * Retrieves all submissions for a specific bounty
    */
   static async getSubmissions(bountyId: string) {
     return await db.submission.findMany({
@@ -151,6 +146,28 @@ export class SubmissionService {
         verificationRuns: true,
       },
       orderBy: { submittedAt: "desc" },
+    });
+  }
+
+  /**
+   * Retrieves a single submission by ID
+   */
+  static async getSubmissionById(submissionId: string) {
+    return await db.submission.findUnique({
+      where: { id: submissionId },
+      include: {
+        agent: {
+          select: {
+            id: true,
+            name: true,
+            walletAddress: true,
+            reputationScore: true,
+          },
+        },
+        bounty: true,
+        verificationRuns: true,
+        settlement: true,
+      },
     });
   }
 }

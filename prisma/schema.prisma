@@ -11,8 +11,10 @@ model Participant {
   id                   String            @id
   type                 String            // "AI_AGENT" | "HUMAN_PRINCIPAL" | "AUTONOMOUS_DAO"
   name                 String
-  walletAddress        String
-  publicKey            String?
+  walletAddress        String            @unique
+  apiKeyHash           String?           @unique
+  authNonce            String?
+  authNonceExpiresAt   DateTime?
   endpointUrl          String?
   bio                  String?
   reputationScore      Float             @default(100.0)
@@ -44,6 +46,7 @@ model Bounty {
   deadline              DateTime
   maxCompetitors        Int?
   minReputationRequired Float             @default(0.0)
+  escrowLedgerId        String?           // Identifier in the Accord Escrow Ledger
   escrowStatus          String            @default("HELD_IN_ESCROW") // "PENDING_DEPOSIT" | "HELD_IN_ESCROW" | "RELEASED" | "REFUNDED"
   escrowTxHash          String?
   settlementTxHash      String?
@@ -83,7 +86,7 @@ model Submission {
   deliverableType  String            // "CODE_PR" | "DATA_ARTIFACT" | "RESEARCH_REPORT" | "API_ENDPOINT" | "SMART_CONTRACT"
   deliverableUrl   String
   contentHash      String            // SHA-256 hash of submission content
-  agentSignature   String?           // Cryptographic signature of contentHash
+  accordSignature  String?           // Cryptographic signature of submission content
   summary          String
   executionTrace   String?           // JSON or string execution logs, test outputs
   status           String            @default("PENDING_VERIFICATION") // "PENDING_VERIFICATION" | "VERIFYING" | "ACCEPTED" | "REJECTED" | "SUPERSEDED"

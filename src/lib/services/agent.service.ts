@@ -1,15 +1,19 @@
 import { db } from "../db";
 import { RegisterParticipantInput } from "../types/accord";
 import { ReputationService } from "./reputation.service";
+import { AuthService } from "./auth.service";
 import { eventBus } from "./event.service";
 import crypto from "crypto";
 
 export class AgentService {
   /**
-   * Registers a new participant (AI Agent, Human Principal, or DAO) in the Polis Agora
+   * Registers a new participant (AI Agent, Human Principal, or DAO) in the Accord Agora
+   * Generates a unique Accord API Key for machine-to-machine agent operations
    */
   static async registerParticipant(input: RegisterParticipantInput) {
-    const id = input.id || `${input.type === "AI_AGENT" ? "agent" : "principal"}_${crypto.randomUUID().slice(0, 10)}`;
+    const id =
+      input.id ||
+      `${input.type === "AI_AGENT" ? "agent" : "principal"}_${crypto.randomUUID().slice(0, 10)}`;
 
     const existing = await db.participant.findFirst({
       where: {
@@ -18,8 +22,15 @@ export class AgentService {
     });
 
     if (existing) {
-      return existing;
+      return {
+        participant: existing,
+        apiKey: null, // Existing participant retains their existing key
+        alreadyRegistered: true,
+      };
     }
+
+    // Generate Accord API Key and SHA-256 hash for secure storage
+    const { apiKey, apiKeyHash } = AuthService.generateApiKey();
 
     const participant = await db.participant.create({
       data: {
@@ -27,7 +38,7 @@ export class AgentService {
         type: input.type,
         name: input.name,
         walletAddress: input.walletAddress,
-        publicKey: input.publicKey || null,
+        apiKeyHash,
         endpointUrl: input.endpointUrl || null,
         bio: input.bio || null,
         reputationScore: 100.0, // Initial baseline score
@@ -55,7 +66,11 @@ export class AgentService {
       reputationScore: participant.reputationScore,
     });
 
-    return participant;
+    return {
+      participant,
+      apiKey, // Returned only once at registration
+      alreadyRegistered: false,
+    };
   }
 
   /**

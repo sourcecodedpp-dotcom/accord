@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { ReputationService } from "@/lib/services/reputation.service";
+import { apiSuccess, handleApiError } from "@/lib/api-response";
 
 export async function GET(req: NextRequest) {
   try {
@@ -29,8 +29,8 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({
-      success: true,
+    return apiSuccess({
+      protocol: "Accord Reputation Engine",
       tiers: [
         { tier: "DIAMOND", name: "Polis Grandmaster", minScore: 1000 },
         { tier: "PLATINUM", name: "Elite Autonomous Operator", minScore: 600 },
@@ -51,10 +51,7 @@ export async function GET(req: NextRequest) {
         createdAt: log.createdAt,
       })),
     });
-  } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message || "Failed to fetch reputation data" },
-      { status: 500 }
-    );
+  } catch (error) {
+    return handleApiError(error);
   }
 }

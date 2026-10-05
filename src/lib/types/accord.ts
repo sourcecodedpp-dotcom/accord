@@ -5,15 +5,32 @@ export const ParticipantTypeEnum = z.enum(["AI_AGENT", "HUMAN_PRINCIPAL", "AUTON
 export type ParticipantType = z.infer<typeof ParticipantTypeEnum>;
 
 export const RegisterParticipantSchema = z.object({
-  id: z.string().min(3).optional(),
+  id: z.string().min(3).max(64).optional(),
   type: ParticipantTypeEnum,
-  name: z.string().min(2),
-  walletAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/, "Invalid EVM wallet address"),
-  publicKey: z.string().optional(),
+  name: z.string().min(2).max(100),
+  walletAddress: z
+    .string()
+    .regex(/^0x[a-fA-F0-9]{40}$/, "Invalid EVM wallet address (must be 0x followed by 40 hex chars)"),
   endpointUrl: z.string().url().optional(),
-  bio: z.string().optional(),
+  bio: z.string().max(500).optional(),
 });
 export type RegisterParticipantInput = z.infer<typeof RegisterParticipantSchema>;
+
+// Auth Request Schemas
+export const RequestNonceSchema = z.object({
+  walletAddress: z
+    .string()
+    .regex(/^0x[a-fA-F0-9]{40}$/, "Invalid EVM wallet address"),
+});
+export type RequestNonceInput = z.infer<typeof RequestNonceSchema>;
+
+export const LoginWithSignatureSchema = z.object({
+  walletAddress: z
+    .string()
+    .regex(/^0x[a-fA-F0-9]{40}$/, "Invalid EVM wallet address"),
+  signature: z.string().min(10, "Invalid signature format"),
+});
+export type LoginWithSignatureInput = z.infer<typeof LoginWithSignatureSchema>;
 
 // Bounty Types
 export const BountyStatusEnum = z.enum([
@@ -43,14 +60,16 @@ export const EscrowStatusEnum = z.enum([
 export type EscrowStatus = z.infer<typeof EscrowStatusEnum>;
 
 export const CreateBountySchema = z.object({
-  id: z.string().optional(),
-  title: z.string().min(5),
-  description: z.string().min(20),
-  acceptanceCriteria: z.array(z.string().min(5)),
-  rewardUsdc: z.number().positive(),
-  creatorId: z.string(),
+  id: z.string().min(3).max(64).optional(),
+  title: z.string().min(5).max(150),
+  description: z.string().min(20).max(10000),
+  acceptanceCriteria: z
+    .array(z.string().min(5).max(500))
+    .min(1, "At least one verifiable acceptance criterion is required"),
+  rewardUsdc: z.number().positive("Reward must be greater than 0 USDC"),
+  creatorId: z.string().min(3),
   competitionMode: CompetitionModeEnum.default("RACE_TO_FIRST_VALID"),
-  deadlineHours: z.number().positive().default(24),
+  deadlineHours: z.number().positive().max(720).default(24),
   maxCompetitors: z.number().int().positive().optional(),
   minReputationRequired: z.number().min(0).default(0),
   metadata: z.record(z.string(), z.any()).optional(),
@@ -58,9 +77,19 @@ export const CreateBountySchema = z.object({
 });
 export type CreateBountyInput = z.infer<typeof CreateBountySchema>;
 
+export const BountyQuerySchema = z.object({
+  status: BountyStatusEnum.optional(),
+  minReward: z.coerce.number().positive().optional(),
+  creatorId: z.string().optional(),
+  query: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+export type BountyQueryInput = z.infer<typeof BountyQuerySchema>;
+
 // Competition Entry
 export const JoinCompetitionSchema = z.object({
-  agentId: z.string(),
+  agentId: z.string().min(3),
   stakeUsdc: z.number().min(0).default(0),
 });
 export type JoinCompetitionInput = z.infer<typeof JoinCompetitionSchema>;
@@ -76,14 +105,14 @@ export const DeliverableTypeEnum = z.enum([
 export type DeliverableType = z.infer<typeof DeliverableTypeEnum>;
 
 export const CreateSubmissionSchema = z.object({
-  agentId: z.string(),
+  agentId: z.string().min(3),
   deliverableType: DeliverableTypeEnum,
-  deliverableUrl: z.string().url(),
-  contentHash: z.string().regex(/^[a-fA-F0-9]{64}$/, "Must be 64-character SHA-256 hash"),
-  agentSignature: z.string().optional(),
-  summary: z.string().min(10),
-  executionTrace: z.string().optional(),
-  codeContent: z.string().optional(), // Raw payload or solution artifact if supplied directly
+  deliverableUrl: z.string().url("Must be a valid deliverable URL"),
+  contentHash: z.string().regex(/^[a-fA-F0-9]{64}$/, "Must be a 64-character SHA-256 hash"),
+  accordSignature: z.string().optional(),
+  summary: z.string().min(10).max(5000),
+  executionTrace: z.string().max(50000).optional(),
+  autoVerify: z.boolean().optional().default(true),
 });
 export type CreateSubmissionInput = z.infer<typeof CreateSubmissionSchema>;
 
@@ -123,10 +152,17 @@ export interface VerificationResult {
   verifiedAt: Date;
 }
 
+export const TriggerVerificationSchema = z.object({
+  submissionId: z.string().min(3),
+  verifierAgentId: z.string().optional(),
+  verifierType: VerifierTypeEnum.optional(),
+});
+export type TriggerVerificationInput = z.infer<typeof TriggerVerificationSchema>;
+
 // Settlement Types
 export const SettleBountySchema = z.object({
-  submissionId: z.string(),
-  customFeePercentage: z.number().min(0).max(10).optional().default(2.5), // Polis protocol fee (2.5%)
+  submissionId: z.string().min(3),
+  customFeePercentage: z.number().min(0).max(10).optional().default(2.5),
 });
 export type SettleBountyInput = z.infer<typeof SettleBountySchema>;
 

@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { AgentService } from "@/lib/services/agent.service";
 import { RegisterParticipantSchema } from "@/lib/types/accord";
+import { apiSuccess, handleApiError } from "@/lib/api-response";
 
 export async function GET(req: NextRequest) {
   try {
@@ -9,17 +10,12 @@ export async function GET(req: NextRequest) {
 
     const leaderboard = await AgentService.getLeaderboard(limit);
 
-    return NextResponse.json({
-      success: true,
+    return apiSuccess({
       count: leaderboard.length,
-      leaderboard,
+      agents: leaderboard,
     });
-  } catch (error: any) {
-    console.error("GET /api/agents error:", error);
-    return NextResponse.json(
-      { success: false, error: error.message || "Failed to fetch agents leaderboard" },
-      { status: 500 }
-    );
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
@@ -28,24 +24,16 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const validated = RegisterParticipantSchema.parse(body);
 
-    const participant = await AgentService.registerParticipant(validated);
+    const result = await AgentService.registerParticipant(validated);
 
-    return NextResponse.json(
-      {
-        success: true,
-        message: `${validated.type} participant registered on Accord Polis Agora`,
-        participant,
-      },
-      { status: 201 }
+    return apiSuccess(
+      result,
+      result.alreadyRegistered ? 200 : 201,
+      result.alreadyRegistered
+        ? "Agent is already registered in Accord Agora"
+        : "Autonomous agent registered in Accord Agora"
     );
-  } catch (error: any) {
-    console.error("POST /api/agents error:", error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: error.errors || error.message || "Invalid participant registration payload",
-      },
-      { status: 400 }
-    );
+  } catch (error) {
+    return handleApiError(error);
   }
 }

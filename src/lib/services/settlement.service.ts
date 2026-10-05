@@ -1,13 +1,13 @@
 import { db } from "../db";
-import { BlockchainEscrowService } from "../blockchain/escrow";
+import { getAccordEscrowLedger } from "../blockchain/accord-escrow-ledger";
 import { ReputationService } from "./reputation.service";
 import { eventBus } from "./event.service";
 import crypto from "crypto";
 
 export class SettlementService {
   /**
-   * Settles an escrowed bounty by releasing USDC to the winning agent, recording
-   * on-chain transaction hashes, updating participant volumes, and growing reputation.
+   * Settles an escrowed bounty by releasing USDC to the winning agent via the Accord Escrow Ledger,
+   * recording on-chain transaction hashes, updating participant volumes, and growing reputation.
    */
   static async settleBounty(params: {
     bountyId: string;
@@ -26,7 +26,7 @@ export class SettlementService {
     }
 
     if (bounty.status === "SETTLED") {
-      throw new Error(`Bounty is already settled.`);
+      throw new Error(`Bounty ${params.bountyId} is already settled.`);
     }
 
     const submission = await db.submission.findUnique({
@@ -50,23 +50,26 @@ export class SettlementService {
       );
     }
 
-    const feePercentage = params.customFeePercentage ?? 2.5; // 2.5% Polis protocol fee
+    const feePercentage = params.customFeePercentage ?? 2.5; // 2.5% Accord protocol fee
     const feeUsdc = Math.round((bounty.rewardUsdc * (feePercentage / 100)) * 100) / 100;
     const netPayoutUsdc = Math.round((bounty.rewardUsdc - feeUsdc) * 100) / 100;
 
-    // Generate settlement cryptographic transaction receipt
-    const receipt = BlockchainEscrowService.generateSettlementReceipt({
+    // 1. Release funds via the Accord Escrow Ledger interface
+    const ledger = getAccordEscrowLedger();
+    const releaseReceipt = await ledger.releaseEscrow({
       bountyId: bounty.id,
+      escrowLedgerId: bounty.escrowLedgerId || `escrow_${bounty.id}`,
       winnerAddress: submission.agent.walletAddress,
       amountUsdc: netPayoutUsdc,
-      feeUsdc,
+      protocolFeeUsdc: feeUsdc,
+      verificationProofHash: submission.contentHash,
     });
 
     const settlementId = `settle_${crypto.randomUUID()}`;
 
-    // Atomic transaction for database settlement
+    // 2. Atomic database state update
     const settlement = await db.$transaction(async (tx) => {
-      // 1. Create Settlement record
+      // Create Settlement record
       const record = await tx.settlement.create({
         data: {
           id: settlementId,
@@ -75,24 +78,24 @@ export class SettlementService {
           agentId: submission.agentId,
           amountUsdc: netPayoutUsdc,
           feeUsdc,
-          escrowContract: receipt.escrowContract,
-          txHash: receipt.txHash,
+          escrowContract: process.env.ACCORD_ESCROW_CONTRACT_ADDRESS || "0x8888888888888888888888888888888888888888",
+          txHash: releaseReceipt.txHash,
           status: "CONFIRMED",
         },
       });
 
-      // 2. Update Bounty to SETTLED
+      // Update Bounty to SETTLED
       await tx.bounty.update({
         where: { id: bounty.id },
         data: {
           status: "SETTLED",
           escrowStatus: "RELEASED",
-          settlementTxHash: receipt.txHash,
+          settlementTxHash: releaseReceipt.txHash,
           winnerAgentId: submission.agentId,
         },
       });
 
-      // 3. Update winning agent's statistics
+      // Update winning agent's statistics
       await tx.participant.update({
         where: { id: submission.agentId },
         data: {
@@ -101,7 +104,7 @@ export class SettlementService {
         },
       });
 
-      // 4. Update creator's volume
+      // Update creator's volume
       await tx.participant.update({
         where: { id: bounty.creatorId },
         data: {
@@ -112,8 +115,7 @@ export class SettlementService {
       return record;
     });
 
-    // 5. Grow agent reputation
-    // Formula: baseline win bonus + reward scaled reward bonus
+    // 3. Grow agent settlement reputation
     const winBonus = Math.min(50, Math.round(15 + Math.sqrt(bounty.rewardUsdc) * 1.5));
     await ReputationService.adjustReputation({
       agentId: submission.agentId,
@@ -123,7 +125,7 @@ export class SettlementService {
       metadata: {
         rewardUsdc: bounty.rewardUsdc,
         netPayoutUsdc,
-        settlementTxHash: receipt.txHash,
+        settlementTxHash: releaseReceipt.txHash,
       },
     });
 
@@ -137,7 +139,7 @@ export class SettlementService {
       },
     });
 
-    // 6. Broadcast live bounty.settled event
+    // 4. Broadcast live bounty.settled event
     await eventBus.emit("bounty.settled", "Bounty", bounty.id, {
       settlementId: settlement.id,
       bountyId: bounty.id,
@@ -148,13 +150,13 @@ export class SettlementService {
       rewardUsdc: bounty.rewardUsdc,
       netPayoutUsdc,
       feeUsdc,
-      txHash: receipt.txHash,
+      txHash: releaseReceipt.txHash,
       settledAt: settlement.settledAt,
     });
 
     return {
       settlement,
-      receipt,
+      releaseReceipt,
       netPayoutUsdc,
       feeUsdc,
     };

@@ -1,11 +1,13 @@
 import { db } from "../db";
-import { CreateBountyInput } from "../types/accord";
+import { CreateBountyInput, BountyQueryInput } from "../types/accord";
+import { getAccordEscrowLedger } from "../blockchain/accord-escrow-ledger";
 import { eventBus } from "./event.service";
 import crypto from "crypto";
 
 export class BountyService {
   /**
    * Creates a live bounty posted by a user (human principal) or an autonomous AI agent
+   * Connects to the Accord Escrow Ledger to secure the USDC reward in escrow
    */
   static async createBounty(input: CreateBountyInput) {
     const creator = await db.participant.findUnique({
@@ -19,6 +21,15 @@ export class BountyService {
     const bountyId = input.id || `bounty_${crypto.randomUUID().slice(0, 12)}`;
     const deadline = new Date(Date.now() + (input.deadlineHours || 24) * 3600 * 1000);
 
+    // 1. Lock funds in the Accord Escrow Ledger
+    const ledger = getAccordEscrowLedger();
+    const escrowReceipt = await ledger.createEscrow({
+      bountyId,
+      amountUsdc: input.rewardUsdc,
+      depositorAddress: creator.walletAddress,
+    });
+
+    // 2. Persist Bounty state in database
     const bounty = await db.$transaction(async (tx) => {
       const created = await tx.bounty.create({
         data: {
@@ -34,8 +45,9 @@ export class BountyService {
           deadline,
           maxCompetitors: input.maxCompetitors || null,
           minReputationRequired: input.minReputationRequired || 0.0,
+          escrowLedgerId: escrowReceipt.escrowLedgerId,
           escrowStatus: "HELD_IN_ESCROW",
-          escrowTxHash: input.escrowTxHash || `0x${crypto.randomBytes(32).toString("hex")}`,
+          escrowTxHash: escrowReceipt.txHash,
           metadata: input.metadata ? JSON.stringify(input.metadata) : null,
         },
         include: {
@@ -62,7 +74,7 @@ export class BountyService {
       return created;
     });
 
-    // Broadcast live event
+    // 3. Broadcast live event
     await eventBus.emit("bounty.created", "Bounty", bounty.id, {
       bountyId: bounty.id,
       title: bounty.title,
@@ -73,22 +85,26 @@ export class BountyService {
       competitionMode: bounty.competitionMode,
       deadline: bounty.deadline,
       minReputationRequired: bounty.minReputationRequired,
+      escrowLedgerId: escrowReceipt.escrowLedgerId,
+      escrowTxHash: escrowReceipt.txHash,
     });
 
-    return bounty;
+    return {
+      bounty: {
+        ...bounty,
+        acceptanceCriteria: JSON.parse(bounty.acceptanceCriteria),
+        metadata: bounty.metadata ? JSON.parse(bounty.metadata) : null,
+      },
+      escrowReceipt,
+    };
   }
 
   /**
-   * Retrieves active live bounties with optional status and minimum reward filtering
+   * Bounty Discovery: Retrieves active live bounties with text search, status, and reward filtering
    */
-  static async listBounties(filters?: {
-    status?: string;
-    minReward?: number;
-    creatorId?: string;
-    limit?: number;
-    offset?: number;
-  }) {
+  static async listBounties(filters?: Partial<BountyQueryInput>) {
     const where: any = {};
+
     if (filters?.status) {
       where.status = filters.status;
     }
@@ -98,38 +114,52 @@ export class BountyService {
     if (filters?.creatorId) {
       where.creatorId = filters.creatorId;
     }
+    if (filters?.query) {
+      where.OR = [
+        { title: { contains: filters.query } },
+        { description: { contains: filters.query } },
+      ];
+    }
 
-    const bounties = await db.bounty.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      take: filters?.limit || 50,
-      skip: filters?.offset || 0,
-      include: {
-        creator: {
-          select: {
-            id: true,
-            name: true,
-            type: true,
-            walletAddress: true,
-            reputationScore: true,
+    const [total, bounties] = await Promise.all([
+      db.bounty.count({ where }),
+      db.bounty.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        take: filters?.limit || 20,
+        skip: filters?.offset || 0,
+        include: {
+          creator: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              walletAddress: true,
+              reputationScore: true,
+            },
+          },
+          _count: {
+            select: {
+              competitionEntries: true,
+              submissions: true,
+            },
           },
         },
-        _count: {
-          select: {
-            competitionEntries: true,
-            submissions: true,
-          },
-        },
-      },
-    });
+      }),
+    ]);
 
-    return bounties.map((b) => ({
-      ...b,
-      acceptanceCriteria: JSON.parse(b.acceptanceCriteria),
-      metadata: b.metadata ? JSON.parse(b.metadata) : null,
-      competitorCount: b._count.competitionEntries,
-      submissionCount: b._count.submissions,
-    }));
+    return {
+      total,
+      limit: filters?.limit || 20,
+      offset: filters?.offset || 0,
+      bounties: bounties.map((b) => ({
+        ...b,
+        acceptanceCriteria: JSON.parse(b.acceptanceCriteria),
+        metadata: b.metadata ? JSON.parse(b.metadata) : null,
+        competitorCount: b._count.competitionEntries,
+        submissionCount: b._count.submissions,
+      })),
+    };
   }
 
   /**
@@ -174,10 +204,15 @@ export class BountyService {
       return null;
     }
 
+    // Inspect live escrow ledger state
+    const ledger = getAccordEscrowLedger();
+    const escrowLedgerState = await ledger.getEscrowState(bounty.id);
+
     return {
       ...bounty,
       acceptanceCriteria: JSON.parse(bounty.acceptanceCriteria),
       metadata: bounty.metadata ? JSON.parse(bounty.metadata) : null,
+      escrowLedgerState,
     };
   }
 }

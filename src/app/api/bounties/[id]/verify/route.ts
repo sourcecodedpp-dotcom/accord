@@ -1,14 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { VerificationService } from "@/lib/services/verification.service";
-import { z } from "zod";
-
-const TriggerVerificationSchema = z.object({
-  submissionId: z.string(),
-  verifierAgentId: z.string().optional(),
-  verifierType: z
-    .enum(["LLM_RUBRIC_EVALUATOR", "DETERMINISTIC_SANDBOX", "MULTI_AGENT_CONSENSUS"])
-    .optional(),
-});
+import { TriggerVerificationSchema } from "@/lib/types/accord";
+import { apiSuccess, handleApiError } from "@/lib/api-response";
 
 export async function POST(
   req: NextRequest,
@@ -25,17 +18,16 @@ export async function POST(
       verifierType: validated.verifierType,
     });
 
-    return NextResponse.json({
-      success: true,
-      bountyId,
-      submissionId: validated.submissionId,
-      verificationResult,
-    });
-  } catch (error: any) {
-    console.error(`POST /api/bounties/[id]/verify error:`, error);
-    return NextResponse.json(
-      { success: false, error: error.message || "Failed to execute AI verification" },
-      { status: 400 }
+    return apiSuccess(
+      {
+        bountyId,
+        submissionId: validated.submissionId,
+        verificationResult,
+      },
+      200,
+      `AI Verification evaluated: ${verificationResult.verdict} (Score: ${verificationResult.score}/100)`
     );
+  } catch (error) {
+    return handleApiError(error);
   }
 }

@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { CompetitionService } from "@/lib/services/competition.service";
 import { z } from "zod";
+import { apiSuccess, handleApiError } from "@/lib/api-response";
 
 const HeartbeatSchema = z.object({
-  agentId: z.string(),
+  agentId: z.string().min(3),
 });
 
 export async function POST(
@@ -17,15 +18,12 @@ export async function POST(
 
     const updated = await CompetitionService.recordHeartbeat(bountyId, agentId);
 
-    return NextResponse.json({
-      success: true,
-      message: `Heartbeat acknowledged for agent ${agentId}`,
-      entry: updated,
-    });
-  } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message || "Failed to record heartbeat" },
-      { status: 400 }
+    return apiSuccess(
+      { entry: updated },
+      200,
+      `Heartbeat acknowledged for agent ${agentId}`
     );
+  } catch (error) {
+    return handleApiError(error);
   }
 }

@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { CompetitionService } from "@/lib/services/competition.service";
 import { JoinCompetitionSchema } from "@/lib/types/accord";
+import { apiSuccess, handleApiError } from "@/lib/api-response";
 
 export async function POST(
   req: NextRequest,
@@ -13,20 +14,13 @@ export async function POST(
 
     const entry = await CompetitionService.joinCompetition(bountyId, validated);
 
-    return NextResponse.json(
-      {
-        success: true,
-        message: `Agent ${validated.agentId} successfully entered competition for bounty ${bountyId}`,
-        entry,
-      },
-      { status: 200 }
+    return apiSuccess(
+      { entry },
+      200,
+      `Agent ${validated.agentId} successfully entered competition for bounty ${bountyId}`
     );
-  } catch (error: any) {
-    console.error(`POST /api/bounties/[id]/compete error:`, error);
-    return NextResponse.json(
-      { success: false, error: error.message || "Failed to join competition" },
-      { status: 400 }
-    );
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
@@ -38,16 +32,12 @@ export async function GET(
     const { id: bountyId } = await params;
     const competitors = await CompetitionService.getCompetitors(bountyId);
 
-    return NextResponse.json({
-      success: true,
+    return apiSuccess({
       bountyId,
       count: competitors.length,
       competitors,
     });
-  } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message || "Failed to list competitors" },
-      { status: 500 }
-    );
+  } catch (error) {
+    return handleApiError(error);
   }
 }
