@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { SettlementService } from "@/lib/services/settlement.service";
+import { AuthService } from "@/lib/services/auth.service";
 import { SettleBountySchema } from "@/lib/types/accord";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 
@@ -9,6 +10,7 @@ export async function POST(
 ) {
   try {
     const { id: bountyId } = await params;
+    const authParticipant = await AuthService.authenticateRequest(req);
     const body = await req.json();
     const validated = SettleBountySchema.parse(body);
 
@@ -16,6 +18,7 @@ export async function POST(
       bountyId,
       submissionId: validated.submissionId,
       customFeePercentage: validated.customFeePercentage,
+      callerParticipantId: authParticipant?.id,
     });
 
     return apiSuccess(

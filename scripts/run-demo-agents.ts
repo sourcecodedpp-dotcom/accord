@@ -8,17 +8,18 @@ async function main() {
   console.log("ACCORD // RUNNING AUTONOMOUS DEMO AGENTS VIA @ACCORD/SDK");
   console.log("================================================================================\n");
 
-  const client = new AccordClient({ baseUrl: "http://localhost:3000" });
+  const baseUrl = "http://localhost:3000";
+  const sponsorClient = new AccordClient({ baseUrl });
 
   // 1. Post a live bounty for the agents to discover
   console.log("1. Posting a live bounty via SDK...");
-  const sponsor = await client.registerPrincipal({
+  const sponsor = await sponsorClient.registerPrincipal({
     type: "AUTONOMOUS_DAO",
     name: "Decentralized Science DAO",
     walletAddress: `0x${Date.now().toString(16).padStart(40, "4")}`,
   });
 
-  const bountyResult = await client.createBounty({
+  const bountyResult = await sponsorClient.createBounty({
     title: "Implement High-Performance Graph BFS in Pure TypeScript",
     description:
       "Construct a zero-dependency Breadth-First Search (BFS) graph algorithm with memory-efficient bitsets, cycle detection, and benchmark suites.",
@@ -39,9 +40,9 @@ async function main() {
 
   // 2. Initialize Autonomous Agents
   console.log("2. Initializing Autonomous Demo Agents...");
-  const agent1 = new SecurityAuditorAgent(client, `0x${Date.now().toString(16).padStart(40, "1")}`);
-  const agent2 = new AlgorithmOptimizationAgent(client, `0x${Date.now().toString(16).padStart(40, "2")}`);
-  const agent3 = new FailingSpamAgent(client, `0x${Date.now().toString(16).padStart(40, "3")}`);
+  const agent1 = new SecurityAuditorAgent(new AccordClient({ baseUrl }), `0x${Date.now().toString(16).padStart(40, "1")}`);
+  const agent2 = new AlgorithmOptimizationAgent(new AccordClient({ baseUrl }), `0x${Date.now().toString(16).padStart(40, "2")}`);
+  const agent3 = new FailingSpamAgent(new AccordClient({ baseUrl }), `0x${Date.now().toString(16).padStart(40, "3")}`);
 
   await agent1.initialize();
   await agent2.initialize();
@@ -66,7 +67,7 @@ async function main() {
   // 4. Settle Escrow
   console.log("\n4. Settling Escrow to Winning Agent...");
   if (res2.verification?.verdict === "PASS") {
-    const settlement = await client.settleBounty(bounty.id, res2.submission.id, 2.5);
+    const settlement = await sponsorClient.settleBounty(bounty.id, res2.submission.id, 2.5);
     console.log(`   🎉 Bounty Settled!`);
     console.log(`   Winner: ${agent2.name}`);
     console.log(`   Net USDC Payout: $${settlement.netPayoutUsdc} USDC`);
@@ -76,7 +77,7 @@ async function main() {
 
   // 5. Leaderboard Check
   console.log("\n5. Checking Updated Leaderboard Standing...");
-  const leaderboard = await client.getLeaderboard(5);
+  const leaderboard = await sponsorClient.getLeaderboard(5);
   leaderboard.forEach((ag) => {
     console.log(`   #${ag.rank} | ${ag.name.padEnd(28)} | Score: ${ag.reputationScore} | Settled: $${ag.settledVolumeUsdc} USDC`);
   });

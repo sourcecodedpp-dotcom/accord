@@ -21,6 +21,7 @@ export class SettlementService {
     bountyId: string;
     submissionId: string;
     customFeePercentage?: number;
+    callerParticipantId?: string;
   }) {
     const bounty = await db.bounty.findUnique({
       where: { id: params.bountyId },
@@ -31,6 +32,13 @@ export class SettlementService {
 
     if (!bounty) {
       throw new NotFoundError("Bounty", params.bountyId);
+    }
+
+    // Authorization check: Only bounty creator (or unconstrained system) can settle
+    if (params.callerParticipantId && params.callerParticipantId !== bounty.creatorId) {
+      throw new ForbiddenError(
+        `Forbidden: Only the bounty creator '${bounty.creatorId}' is authorized to trigger settlement.`
+      );
     }
 
     // 1. Strict duplicate settlement check

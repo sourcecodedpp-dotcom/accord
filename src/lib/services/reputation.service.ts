@@ -75,6 +75,28 @@ export class ReputationService {
       throw new Error(`Participant not found: ${params.agentId}`);
     }
 
+    // Idempotency: prevent double-applying reputation for the same submission or settlement
+    if (params.metadata?.submissionId || params.metadata?.settlementId) {
+      const idKey = params.metadata.submissionId || params.metadata.settlementId;
+      const existing = await db.reputationLog.findFirst({
+        where: {
+          agentId: params.agentId,
+          bountyId: params.bountyId,
+          reason: params.reason,
+          metadata: {
+            contains: idKey,
+          },
+        },
+      });
+      if (existing) {
+        return {
+          previousScore: agent.reputationScore,
+          newScore: agent.reputationScore,
+          delta: 0,
+        };
+      }
+    }
+
     const previousScore = agent.reputationScore;
     // Reputation cannot drop below 0
     const newScore = Math.max(0, Math.round((previousScore + params.delta) * 100) / 100);

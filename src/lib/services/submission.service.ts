@@ -2,6 +2,12 @@ import { db } from "../db";
 import { CreateSubmissionInput } from "../types/accord";
 import { VerificationService } from "./verification.service";
 import { eventBus } from "./event.service";
+import {
+  NotFoundError,
+  ForbiddenError,
+  BountyExpiredError,
+  DuplicateSubmissionError,
+} from "@accord/protocol";
 import crypto from "crypto";
 
 export class SubmissionService {
@@ -11,19 +17,36 @@ export class SubmissionService {
   static async submitSolution(params: {
     bountyId: string;
     input: CreateSubmissionInput;
+    callerParticipantId?: string;
   }) {
-    const { bountyId, input } = params;
+    const { bountyId, input, callerParticipantId } = params;
 
     const bounty = await db.bounty.findUnique({
       where: { id: bountyId },
     });
 
     if (!bounty) {
-      throw new Error(`Bounty not found: ${bountyId}`);
+      throw new NotFoundError("Bounty", bountyId);
     }
 
     if (bounty.status === "SETTLED" || bounty.status === "CANCELLED" || bounty.status === "EXPIRED") {
       throw new Error(`Cannot submit: Bounty status is ${bounty.status}`);
+    }
+
+    // Check if bounty deadline has passed
+    if (new Date() > new Date(bounty.deadline)) {
+      await db.bounty.update({
+        where: { id: bountyId },
+        data: { status: "EXPIRED" },
+      });
+      throw new BountyExpiredError(bountyId, bounty.deadline);
+    }
+
+    // Authorization check: caller must match input.agentId if specified
+    if (callerParticipantId && callerParticipantId !== input.agentId) {
+      throw new ForbiddenError(
+        `Caller '${callerParticipantId}' is not authorized to submit solutions on behalf of agent '${input.agentId}'`
+      );
     }
 
     const agent = await db.participant.findUnique({
@@ -31,7 +54,7 @@ export class SubmissionService {
     });
 
     if (!agent) {
-      throw new Error(`Agent not found: ${input.agentId}`);
+      throw new NotFoundError("Agent", input.agentId);
     }
 
     // Verify agent is a registered competitor
@@ -45,7 +68,20 @@ export class SubmissionService {
     });
 
     if (!entry) {
-      throw new Error(`Agent ${input.agentId} has not joined the competition for bounty ${bountyId}`);
+      throw new ForbiddenError(`Agent ${input.agentId} has not joined the competition for bounty ${bountyId}`);
+    }
+
+    // Check duplicate active or accepted submission
+    const existingSubmission = await db.submission.findFirst({
+      where: {
+        bountyId,
+        agentId: input.agentId,
+        status: { in: ["PENDING_VERIFICATION", "ACCEPTED"] },
+      },
+    });
+
+    if (existingSubmission) {
+      throw new DuplicateSubmissionError(bountyId, input.agentId);
     }
 
     const submissionId = `sub_${crypto.randomUUID()}`;

@@ -1,13 +1,24 @@
 import { db } from "../db";
 import { JoinCompetitionInput } from "../types/accord";
 import { eventBus } from "./event.service";
+import { NotFoundError, ForbiddenError } from "@accord/protocol";
 import crypto from "crypto";
 
 export class CompetitionService {
   /**
    * Enters an autonomous AI agent into a live bounty competition
    */
-  static async joinCompetition(bountyId: string, input: JoinCompetitionInput) {
+  static async joinCompetition(
+    bountyId: string,
+    input: JoinCompetitionInput,
+    callerParticipantId?: string
+  ) {
+    if (callerParticipantId && callerParticipantId !== input.agentId) {
+      throw new ForbiddenError(
+        `Caller '${callerParticipantId}' is not authorized to register agent '${input.agentId}' for competition`
+      );
+    }
+
     const bounty = await db.bounty.findUnique({
       where: { id: bountyId },
       include: {
@@ -16,7 +27,7 @@ export class CompetitionService {
     });
 
     if (!bounty) {
-      throw new Error(`Bounty not found: ${bountyId}`);
+      throw new NotFoundError("Bounty", bountyId);
     }
 
     if (bounty.status !== "OPEN" && bounty.status !== "IN_COMPETITION") {
@@ -32,7 +43,7 @@ export class CompetitionService {
     });
 
     if (!agent) {
-      throw new Error(`Agent not found: ${input.agentId}`);
+      throw new NotFoundError("Agent", input.agentId);
     }
 
     if (agent.type !== "AI_AGENT") {
@@ -115,7 +126,17 @@ export class CompetitionService {
   /**
    * Updates an agent's heartbeat timestamp while working on a bounty
    */
-  static async recordHeartbeat(bountyId: string, agentId: string) {
+  static async recordHeartbeat(
+    bountyId: string,
+    agentId: string,
+    callerParticipantId?: string
+  ) {
+    if (callerParticipantId && callerParticipantId !== agentId) {
+      throw new ForbiddenError(
+        `Caller '${callerParticipantId}' is not authorized to send heartbeats for agent '${agentId}'`
+      );
+    }
+
     const entry = await db.competitionEntry.findUnique({
       where: {
         bountyId_agentId: {
@@ -126,7 +147,7 @@ export class CompetitionService {
     });
 
     if (!entry) {
-      throw new Error(`Competition entry not found for agent ${agentId} on bounty ${bountyId}`);
+      throw new NotFoundError("CompetitionEntry for agent on bounty", `${agentId}:${bountyId}`);
     }
 
     const updated = await db.competitionEntry.update({

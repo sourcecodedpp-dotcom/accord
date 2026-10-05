@@ -1,15 +1,26 @@
 {
-  "name": "hhgoa",
+  "name": "accord",
   "version": "1.0.0",
+  "bin": {
+    "accord": "./packages/cli/bin/accord.js"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
   "main": "index.js",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build:cli": "esbuild packages/cli/src/cli.ts --bundle --platform=node --target=node18 --outfile=packages/cli/dist/cli.js",
+    "build": "npm run build:cli && next build",
     "start": "next start",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "test": "tsx tests/bounty-lifecycle.test.ts",
     "test:lifecycle": "tsx tests/bounty-lifecycle.test.ts",
+    "test:comprehensive": "tsx tests/comprehensive-protocol.test.ts",
+    "test:audit": "tsx tests/production-audit-edge-cases.test.ts",
+    "test:all": "npm test && npm run test:comprehensive && npm run test:audit",
+    "demo:agents": "tsx scripts/run-demo-agents.ts",
     "agent:simulate": "tsx scripts/simulate-agent-competition.ts"
   },
   "keywords": [],

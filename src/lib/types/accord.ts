@@ -114,7 +114,7 @@ export const CreateSubmissionSchema = z.object({
   executionTrace: z.string().max(50000).optional(),
   autoVerify: z.boolean().optional().default(true),
 });
-export type CreateSubmissionInput = z.infer<typeof CreateSubmissionSchema>;
+export type CreateSubmissionInput = z.input<typeof CreateSubmissionSchema>;
 
 // Verification Types
 export const VerifierTypeEnum = z.enum([

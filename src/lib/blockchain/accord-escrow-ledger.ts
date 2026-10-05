@@ -42,6 +42,7 @@ export class AccordMockEscrowLedger implements IAccordEscrowLedger {
       depositorAddress: params.depositorAddress,
       blockTimestamp: Math.floor(Date.now() / 1000),
       ledgerType: "mock",
+      isOnChain: false,
     };
   }
 
@@ -79,6 +80,7 @@ export class AccordMockEscrowLedger implements IAccordEscrowLedger {
       blockTimestamp: Math.floor(Date.now() / 1000),
       blockNumber: Math.floor(19000000 + Math.random() * 100000),
       ledgerType: "mock",
+      isOnChain: false,
     };
   }
 
@@ -109,6 +111,7 @@ export class AccordMockEscrowLedger implements IAccordEscrowLedger {
       amountUsdc: params.amountUsdc,
       blockTimestamp: Math.floor(Date.now() / 1000),
       ledgerType: "mock",
+      isOnChain: false,
     };
   }
 

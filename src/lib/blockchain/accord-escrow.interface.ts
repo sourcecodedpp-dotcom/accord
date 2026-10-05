@@ -5,6 +5,7 @@ export interface EscrowDepositReceipt {
   depositorAddress: string;
   blockTimestamp: number;
   ledgerType: "mock" | "testnet" | "mainnet";
+  isOnChain?: boolean;
 }
 
 export interface EscrowReleaseReceipt {
@@ -16,6 +17,7 @@ export interface EscrowReleaseReceipt {
   blockTimestamp: number;
   blockNumber: number;
   ledgerType: "mock" | "testnet" | "mainnet";
+  isOnChain?: boolean;
 }
 
 export interface EscrowRefundReceipt {
@@ -25,6 +27,7 @@ export interface EscrowRefundReceipt {
   amountUsdc: number;
   blockTimestamp: number;
   ledgerType: "mock" | "testnet" | "mainnet";
+  isOnChain?: boolean;
 }
 
 export interface EscrowStateDetails {

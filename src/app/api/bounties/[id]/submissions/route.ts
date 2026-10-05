@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { SubmissionService } from "@/lib/services/submission.service";
+import { AuthService } from "@/lib/services/auth.service";
 import { CreateSubmissionSchema } from "@/lib/types/accord";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 
@@ -9,12 +10,14 @@ export async function POST(
 ) {
   try {
     const { id: bountyId } = await params;
+    const authParticipant = await AuthService.authenticateRequest(req);
     const body = await req.json();
     const validated = CreateSubmissionSchema.parse(body);
 
     const result = await SubmissionService.submitSolution({
       bountyId,
       input: validated,
+      callerParticipantId: authParticipant?.id,
     });
 
     return apiSuccess(

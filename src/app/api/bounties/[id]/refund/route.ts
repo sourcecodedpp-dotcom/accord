@@ -23,6 +23,13 @@ export async function POST(
 
     // Authenticate requester
     const authParticipant = await AuthService.authenticateRequest(req);
+    if (authParticipant && validated.creatorId && authParticipant.id !== validated.creatorId) {
+      return apiError(
+        `Authenticated participant '${authParticipant.id}' cannot request refund on behalf of '${validated.creatorId}'`,
+        403,
+        "FORBIDDEN"
+      );
+    }
     const requesterId = authParticipant?.id || validated.creatorId;
 
     if (!requesterId) {

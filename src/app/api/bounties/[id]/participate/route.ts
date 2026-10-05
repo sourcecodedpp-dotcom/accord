@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { CompetitionService } from "@/lib/services/competition.service";
+import { AuthService } from "@/lib/services/auth.service";
 import { JoinCompetitionSchema } from "@/lib/types/accord";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 
@@ -9,10 +10,15 @@ export async function POST(
 ) {
   try {
     const { id: bountyId } = await params;
+    const authParticipant = await AuthService.authenticateRequest(req);
     const body = await req.json();
     const validated = JoinCompetitionSchema.parse(body);
 
-    const entry = await CompetitionService.joinCompetition(bountyId, validated);
+    const entry = await CompetitionService.joinCompetition(
+      bountyId,
+      validated,
+      authParticipant?.id
+    );
 
     return apiSuccess(
       { entry },
