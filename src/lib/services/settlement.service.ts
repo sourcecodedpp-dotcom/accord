@@ -2,12 +2,20 @@ import { db } from "../db";
 import { getAccordEscrowLedger } from "../blockchain/accord-escrow-ledger";
 import { ReputationService } from "./reputation.service";
 import { eventBus } from "./event.service";
+import {
+  AlreadySettledError,
+  NotFoundError,
+  ForbiddenError,
+  ConflictError,
+  BountyStateMachine,
+} from "@accord/protocol";
 import crypto from "crypto";
 
 export class SettlementService {
   /**
    * Settles an escrowed bounty by releasing USDC to the winning agent via the Accord Escrow Ledger,
    * recording on-chain transaction hashes, updating participant volumes, and growing reputation.
+   * Strictly prevents duplicate settlements.
    */
   static async settleBounty(params: {
     bountyId: string;
@@ -22,12 +30,26 @@ export class SettlementService {
     });
 
     if (!bounty) {
-      throw new Error(`Bounty not found: ${params.bountyId}`);
+      throw new NotFoundError("Bounty", params.bountyId);
     }
 
-    if (bounty.status === "SETTLED") {
-      throw new Error(`Bounty ${params.bountyId} is already settled.`);
+    // 1. Strict duplicate settlement check
+    const existingSettlement = await db.settlement.findFirst({
+      where: {
+        OR: [{ bountyId: params.bountyId }, { submissionId: params.submissionId }],
+      },
+    });
+
+    if (existingSettlement || bounty.status === "SETTLED") {
+      throw new AlreadySettledError(params.bountyId);
     }
+
+    // Assert valid state machine transition
+    BountyStateMachine.assertTransition(
+      bounty.id,
+      bounty.status as any,
+      "SETTLED"
+    );
 
     const submission = await db.submission.findUnique({
       where: { id: params.submissionId },
@@ -37,15 +59,15 @@ export class SettlementService {
     });
 
     if (!submission) {
-      throw new Error(`Submission not found: ${params.submissionId}`);
+      throw new NotFoundError("Submission", params.submissionId);
     }
 
     if (submission.bountyId !== bounty.id) {
-      throw new Error(`Submission does not belong to bounty ${bounty.id}`);
+      throw new ConflictError(`Submission does not belong to bounty ${bounty.id}`);
     }
 
     if (submission.status !== "ACCEPTED") {
-      throw new Error(
+      throw new ConflictError(
         `Cannot settle bounty: Submission status is '${submission.status}'. AI verification must PASS before settlement.`
       );
     }
@@ -54,7 +76,7 @@ export class SettlementService {
     const feeUsdc = Math.round((bounty.rewardUsdc * (feePercentage / 100)) * 100) / 100;
     const netPayoutUsdc = Math.round((bounty.rewardUsdc - feeUsdc) * 100) / 100;
 
-    // 1. Release funds via the Accord Escrow Ledger interface
+    // 2. Release funds via the Accord Escrow Ledger interface
     const ledger = getAccordEscrowLedger();
     const releaseReceipt = await ledger.releaseEscrow({
       bountyId: bounty.id,
@@ -67,7 +89,7 @@ export class SettlementService {
 
     const settlementId = `settle_${crypto.randomUUID()}`;
 
-    // 2. Atomic database state update
+    // 3. Atomic database state update
     const settlement = await db.$transaction(async (tx) => {
       // Create Settlement record
       const record = await tx.settlement.create({
@@ -78,7 +100,8 @@ export class SettlementService {
           agentId: submission.agentId,
           amountUsdc: netPayoutUsdc,
           feeUsdc,
-          escrowContract: process.env.ACCORD_ESCROW_CONTRACT_ADDRESS || "0x8888888888888888888888888888888888888888",
+          escrowContract:
+            process.env.ACCORD_ESCROW_CONTRACT_ADDRESS || "0x8888888888888888888888888888888888888888",
           txHash: releaseReceipt.txHash,
           status: "CONFIRMED",
         },
@@ -115,7 +138,7 @@ export class SettlementService {
       return record;
     });
 
-    // 3. Grow agent settlement reputation
+    // 4. Grow agent settlement reputation
     const winBonus = Math.min(50, Math.round(15 + Math.sqrt(bounty.rewardUsdc) * 1.5));
     await ReputationService.adjustReputation({
       agentId: submission.agentId,
@@ -139,8 +162,8 @@ export class SettlementService {
       },
     });
 
-    // 4. Broadcast live bounty.settled event
-    await eventBus.emit("bounty.settled", "Bounty", bounty.id, {
+    // 5. Broadcast live bounty.settled event
+    await eventBus.emit("bounty.settled" as any, "Bounty", bounty.id, {
       settlementId: settlement.id,
       bountyId: bounty.id,
       bountyTitle: bounty.title,
@@ -160,5 +183,64 @@ export class SettlementService {
       netPayoutUsdc,
       feeUsdc,
     };
+  }
+
+  /**
+   * Refunds an expired or cancelled bounty back to the creator
+   */
+  static async refundBounty(params: {
+    bountyId: string;
+    requesterId: string;
+  }) {
+    const bounty = await db.bounty.findUnique({
+      where: { id: params.bountyId },
+      include: { creator: true },
+    });
+
+    if (!bounty) {
+      throw new NotFoundError("Bounty", params.bountyId);
+    }
+
+    if (bounty.creatorId !== params.requesterId) {
+      throw new ForbiddenError("Only the bounty creator can request an escrow refund");
+    }
+
+    if (bounty.status === "SETTLED") {
+      throw new ConflictError("Cannot refund an already settled bounty");
+    }
+
+    if (bounty.escrowStatus === "REFUNDED") {
+      throw new ConflictError("Bounty escrow has already been refunded");
+    }
+
+    const isPastDeadline = new Date() > bounty.deadline;
+    if (!isPastDeadline && bounty.status !== "CANCELLED") {
+      throw new ConflictError("Bounty deadline has not elapsed and bounty is not cancelled");
+    }
+
+    const ledger = getAccordEscrowLedger();
+    const refundReceipt = await ledger.refundEscrow({
+      bountyId: bounty.id,
+      escrowLedgerId: bounty.escrowLedgerId || `escrow_${bounty.id}`,
+      refundToAddress: bounty.creator.walletAddress,
+      amountUsdc: bounty.rewardUsdc,
+    });
+
+    await db.bounty.update({
+      where: { id: bounty.id },
+      data: {
+        status: "EXPIRED",
+        escrowStatus: "REFUNDED",
+      },
+    });
+
+    await eventBus.emit("bounty.expired" as any, "Bounty", bounty.id, {
+      bountyId: bounty.id,
+      refundTo: bounty.creator.walletAddress,
+      amountUsdc: bounty.rewardUsdc,
+      txHash: refundReceipt.txHash,
+    });
+
+    return refundReceipt;
   }
 }

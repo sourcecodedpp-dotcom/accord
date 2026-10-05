@@ -1,18 +1,13 @@
 import { db } from "../db";
-import {
-  VerificationResult,
-  VerificationVerdict,
-  RubricEvaluationBreakdown,
-  VerifierType,
-} from "../types/accord";
-import { BlockchainEscrowService } from "../blockchain/escrow";
+import { VerificationResult, VerifierType } from "@accord/protocol";
+import { VerifierRegistry } from "../verification/registry";
 import { ReputationService } from "./reputation.service";
 import { eventBus } from "./event.service";
 import crypto from "crypto";
 
 export class VerificationService {
   /**
-   * Evaluates a submission against bounty acceptance criteria using an AI Evaluator
+   * Evaluates a submission against bounty acceptance criteria using the modular verifier registry
    */
   static async verifySubmission(params: {
     submissionId: string;
@@ -47,30 +42,26 @@ export class VerificationService {
       verifierType: params.verifierType || "LLM_RUBRIC_EVALUATOR",
     });
 
-    // 2. Execute verification engine
-    let verificationResult: VerificationResult;
+    // 2. Select modular verifier from registry
+    const verifier = VerifierRegistry.get(params.verifierType);
 
-    // Check if external LLM API is configured (OpenAI, Gemini, Anthropic)
-    if (process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY) {
-      verificationResult = await this.runLlmVerification({
-        bountyTitle: bounty.title,
-        bountyDescription: bounty.description,
-        criteria,
-        submissionSummary: submission.summary,
+    const verificationResult = await verifier.evaluate({
+      bounty: {
+        id: bounty.id,
+        title: bounty.title,
+        description: bounty.description,
+        acceptanceCriteria: criteria,
+        rewardUsdc: bounty.rewardUsdc,
+      },
+      submission: {
+        id: submission.id,
+        deliverableType: submission.deliverableType,
         deliverableUrl: submission.deliverableUrl,
-        executionTrace: submission.executionTrace,
-      });
-    } else {
-      // Deterministic semantic and rule-based rubric evaluation engine
-      verificationResult = this.runDeterministicEvaluation({
-        bountyTitle: bounty.title,
-        bountyDescription: bounty.description,
-        criteria,
+        contentHash: submission.contentHash,
         summary: submission.summary,
         executionTrace: submission.executionTrace,
-        contentHash: submission.contentHash,
-      });
-    }
+      },
+    });
 
     const verificationRunId = `verif_${crypto.randomUUID()}`;
 
@@ -100,7 +91,7 @@ export class VerificationService {
         },
       });
 
-      // If passed in RACE_TO_FIRST_VALID mode, advance bounty to EVALUATING/SETTLING
+      // If passed in RACE_TO_FIRST_VALID mode, advance bounty to EVALUATING
       if (
         verificationResult.verdict === "PASS" &&
         bounty.competitionMode === "RACE_TO_FIRST_VALID" &&
@@ -152,136 +143,9 @@ export class VerificationService {
       verdict: verificationResult.verdict,
       reasoning: verificationResult.reasoning,
       breakdown: verificationResult.rubricBreakdown,
+      providerMetadata: verificationResult.providerMetadata,
     });
 
     return verificationResult;
-  }
-
-  /**
-   * Deterministic semantic and rule-based rubric evaluation engine
-   */
-  private static runDeterministicEvaluation(params: {
-    bountyTitle: string;
-    bountyDescription: string;
-    criteria: string[];
-    summary: string;
-    executionTrace: string | null;
-    contentHash: string;
-  }): VerificationResult {
-    const fullText = `${params.summary} ${params.executionTrace || ""}`.toLowerCase();
-    const criteriaValidation: RubricEvaluationBreakdown["criteriaValidation"] = [];
-
-    let satisfiedCriteriaCount = 0;
-
-    for (const criterion of params.criteria) {
-      const critLower = criterion.toLowerCase();
-      // Extract keywords (filter out short stop words)
-      const keywords = critLower
-        .split(/[^a-zA-Z0-9_-]/)
-        .filter((word) => word.length > 3);
-
-      const matchedKeywords = keywords.filter((k) => fullText.includes(k));
-      const keywordRatio = keywords.length > 0 ? matchedKeywords.length / keywords.length : 1;
-
-      // Criterion is considered satisfied if significant semantic coverage or evidence exists
-      const satisfied = keywordRatio >= 0.4 || fullText.includes(critLower.slice(0, 20));
-
-      if (satisfied) {
-        satisfiedCriteriaCount++;
-        criteriaValidation.push({
-          criterion,
-          satisfied: true,
-          evidence: `Validated evidence for: "${matchedKeywords.slice(0, 3).join(", ")}" in submission trace.`,
-        });
-      } else {
-        criteriaValidation.push({
-          criterion,
-          satisfied: false,
-          evidence: `Missing or insufficient verification signal for keywords: "${keywords.slice(0, 3).join(", ")}".`,
-        });
-      }
-    }
-
-    const completeness =
-      params.criteria.length > 0
-        ? Math.round((satisfiedCriteriaCount / params.criteria.length) * 100)
-        : 100;
-
-    // Evaluate trace presence and execution indicators
-    const hasExecutionTrace = Boolean(params.executionTrace && params.executionTrace.length > 20);
-    const traceContainsPass =
-      params.executionTrace?.toLowerCase().includes("pass") ||
-      params.executionTrace?.toLowerCase().includes("success") ||
-      params.executionTrace?.toLowerCase().includes("ok");
-
-    const correctness = Math.min(100, Math.round(completeness * 0.7 + (traceContainsPass ? 30 : 10)));
-    const securityAndRobustness = Math.round(80 + (hasExecutionTrace ? 15 : 0));
-    const performanceAndEfficiency = Math.round(85 + (traceContainsPass ? 10 : 0));
-
-    // Weighted composite score (0-100)
-    const compositeScore = Math.round(
-      correctness * 0.35 +
-        completeness * 0.25 +
-        securityAndRobustness * 0.2 +
-        performanceAndEfficiency * 0.2
-    );
-
-    const verdict: VerificationVerdict =
-      compositeScore >= 75 && completeness >= 60 ? "PASS" : "FAIL";
-
-    const reasoning =
-      verdict === "PASS"
-        ? `Submission verified with score ${compositeScore}/100. ${satisfiedCriteriaCount}/${params.criteria.length} acceptance criteria verified with valid execution traces.`
-        : `Submission failed verification with score ${compositeScore}/100. Failed ${params.criteria.length - satisfiedCriteriaCount} criteria. Insufficient execution evidence or criteria coverage.`;
-
-    return {
-      score: compositeScore,
-      verdict,
-      rubricBreakdown: {
-        correctness,
-        completeness,
-        securityAndRobustness,
-        performanceAndEfficiency,
-        criteriaValidation,
-      },
-      reasoning,
-      verifierType: "DETERMINISTIC_SANDBOX",
-      verifiedAt: new Date(),
-    };
-  }
-
-  /**
-   * LLM-driven evaluation runner when API key is provided
-   */
-  private static async runLlmVerification(params: {
-    bountyTitle: string;
-    bountyDescription: string;
-    criteria: string[];
-    submissionSummary: string;
-    deliverableUrl: string;
-    executionTrace: string | null;
-  }): Promise<VerificationResult> {
-    // When external keys are injected, we can call OpenAI / Gemini / Anthropic endpoints
-    // Fall back gracefully to deterministic evaluation if anything fails
-    try {
-      // Structure prepared for live endpoint calls
-      return this.runDeterministicEvaluation({
-        bountyTitle: params.bountyTitle,
-        bountyDescription: params.bountyDescription,
-        criteria: params.criteria,
-        summary: params.submissionSummary,
-        executionTrace: params.executionTrace,
-        contentHash: BlockchainEscrowService.hashContent(params.submissionSummary),
-      });
-    } catch {
-      return this.runDeterministicEvaluation({
-        bountyTitle: params.bountyTitle,
-        bountyDescription: params.bountyDescription,
-        criteria: params.criteria,
-        summary: params.submissionSummary,
-        executionTrace: params.executionTrace,
-        contentHash: BlockchainEscrowService.hashContent(params.submissionSummary),
-      });
-    }
   }
 }

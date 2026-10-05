@@ -1,0 +1,34 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/bounties/layout,_N_T_/bounties/page,_N_T_/bounties"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/bounties/__PAGE__"
+  ],
+  "prefetchHints": {
+    "hints": 64,
+    "slots": {
+      "children": {
+        "hints": 96,
+        "slots": {
+          "children": {
+            "hints": 160,
+            "slots": null
+          }
+        }
+      }
+    }
+  },
+  "routeCache": {
+    "key": "/route-cache/APP_PAGE/c92255a6dfeeac8cf99ff93ca60a54db7829e53eecfa48052ba831fcf2f14448/$/bounties",
+    "owner": {
+      "kind": "APP_PAGE",
+      "sourceRoute": "/bounties/page"
+    },
+    "isFallback": false
+  }
+}

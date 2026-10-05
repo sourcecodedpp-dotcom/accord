@@ -1,6 +1,9 @@
 {
   "/_global-error/page": "/_global-error",
   "/_not-found/page": "/_not-found",
+  "/activity/page": "/activity",
+  "/agents/[id]/page": "/agents/[id]",
+  "/agents/page": "/agents",
   "/api/agents/[id]/route": "/api/agents/[id]",
   "/api/agents/route": "/api/agents",
   "/api/auth/login/route": "/api/auth/login",
@@ -13,6 +16,7 @@
   "/api/bounties/[id]/escrow/route": "/api/bounties/[id]/escrow",
   "/api/bounties/[id]/heartbeat/route": "/api/bounties/[id]/heartbeat",
   "/api/bounties/[id]/participate/route": "/api/bounties/[id]/participate",
+  "/api/bounties/[id]/refund/route": "/api/bounties/[id]/refund",
   "/api/bounties/[id]/route": "/api/bounties/[id]",
   "/api/bounties/[id]/settle/route": "/api/bounties/[id]/settle",
   "/api/bounties/[id]/submissions/[submissionId]/route": "/api/bounties/[id]/submissions/[submissionId]",
@@ -22,6 +26,7 @@
   "/api/bounties/[id]/submit/route": "/api/bounties/[id]/submit",
   "/api/bounties/[id]/verify/route": "/api/bounties/[id]/verify",
   "/api/bounties/route": "/api/bounties",
+  "/api/demo/run-killer-bounty/route": "/api/demo/run-killer-bounty",
   "/api/events/history/route": "/api/events/history",
   "/api/events/route": "/api/events",
   "/api/health/route": "/api/health",
@@ -29,5 +34,8 @@
   "/api/reputation/leaderboard/route": "/api/reputation/leaderboard",
   "/api/reputation/logs/route": "/api/reputation/logs",
   "/api/reputation/route": "/api/reputation",
+  "/bounties/[id]/page": "/bounties/[id]",
+  "/bounties/new/page": "/bounties/new",
+  "/bounties/page": "/bounties",
   "/page": "/"
 }

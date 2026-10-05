@@ -1,5 +1,5 @@
 var R=require("../../../../../chunks/[turbopack]_runtime.js")("server/app/api/bounties/[id]/compete/route.js")
-R.c("server/chunks/[root-of-the-server]__05d0r3r._.js")
+R.c("server/chunks/[root-of-the-server]__18nljh_._.js")
 R.c("server/chunks/node_modules_zod_v4_classic_errors_0tp0y-q.js")
 R.c("server/chunks/[root-of-the-server]__15bjnu5._.js")
 R.c("server/chunks/node_modules_zod_v4_classic_external_1-pw2v2.js")

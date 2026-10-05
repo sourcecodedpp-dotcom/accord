@@ -25,6 +25,12 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@accord/protocol": [
+        "./packages/protocol/src"
+      ],
+      "@accord/sdk": [
+        "./packages/sdk/src"
       ]
     }
   },

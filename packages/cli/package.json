@@ -1,0 +1,12 @@
+{
+  "name": "accord",
+  "version": "1.0.0",
+  "description": "CLI tool for the Accord AI Bounty Protocol",
+  "bin": {
+    "accord": "./bin/accord.js"
+  },
+  "main": "src/cli.ts",
+  "dependencies": {
+    "@accord/sdk": "1.0.0"
+  }
+}

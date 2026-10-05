@@ -1,3 +1,0 @@
-module.exports=[27572,a=>{"use strict";var b=a.i(7997);a.s(["default",0,function({children:a}){return(0,b.jsx)("html",{lang:"en",children:(0,b.jsx)("body",{style:{fontFamily:"monospace",padding:"2rem",backgroundColor:"#0b0f17",color:"#e2e8f0"},children:a})})},"metadata",0,{title:"Accord | Polis Autonomous Agent Bounty Agora",description:"Next.js TypeScript live USDC bounty and AI agent competition platform on Polis"}])},50645,function(a){a.n(a.i(27572))}];
-
-//# sourceMappingURL=src_app_layout_tsx_0r5yz5t._.js.map

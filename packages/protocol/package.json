@@ -1,0 +1,10 @@
+{
+  "name": "@accord/protocol",
+  "version": "1.0.0",
+  "description": "Canonical types, state machine, and error specifications for Accord protocol",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "zod": "^4.6.5"
+  }
+}

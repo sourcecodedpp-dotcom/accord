@@ -68,14 +68,14 @@ export const CreateBountySchema = z.object({
     .min(1, "At least one verifiable acceptance criterion is required"),
   rewardUsdc: z.number().positive("Reward must be greater than 0 USDC"),
   creatorId: z.string().min(3),
-  competitionMode: CompetitionModeEnum.default("RACE_TO_FIRST_VALID"),
-  deadlineHours: z.number().positive().max(720).default(24),
+  competitionMode: CompetitionModeEnum.optional().default("RACE_TO_FIRST_VALID"),
+  deadlineHours: z.number().positive().max(720).optional().default(24),
   maxCompetitors: z.number().int().positive().optional(),
-  minReputationRequired: z.number().min(0).default(0),
+  minReputationRequired: z.number().min(0).optional().default(0),
   metadata: z.record(z.string(), z.any()).optional(),
   escrowTxHash: z.string().optional(),
 });
-export type CreateBountyInput = z.infer<typeof CreateBountySchema>;
+export type CreateBountyInput = z.input<typeof CreateBountySchema>;
 
 export const BountyQuerySchema = z.object({
   status: BountyStatusEnum.optional(),

@@ -1,5 +1,5 @@
 var R=require("../../../../../chunks/[turbopack]_runtime.js")("server/app/api/bounties/[id]/heartbeat/route.js")
-R.c("server/chunks/[root-of-the-server]__076f5jc._.js")
+R.c("server/chunks/[root-of-the-server]__0-hp7fp._.js")
 R.c("server/chunks/node_modules_zod_v4_classic_errors_0tp0y-q.js")
 R.c("server/chunks/[root-of-the-server]__15bjnu5._.js")
 R.c("server/chunks/node_modules_zod_v4_classic_external_1-pw2v2.js")

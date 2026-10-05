@@ -47,6 +47,60 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
 }
 
 
+// Validate ../../src/app/activity/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/activity">> = Specific
+  const handler = {} as typeof import("../../src/app/activity/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/agents/[id]/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/agents/[id]">> = Specific
+  const handler = {} as typeof import("../../src/app/agents/[id]/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/agents/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/agents">> = Specific
+  const handler = {} as typeof import("../../src/app/agents/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/bounties/[id]/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/bounties/[id]">> = Specific
+  const handler = {} as typeof import("../../src/app/bounties/[id]/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/bounties/new/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/bounties/new">> = Specific
+  const handler = {} as typeof import("../../src/app/bounties/new/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/bounties/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/bounties">> = Specific
+  const handler = {} as typeof import("../../src/app/bounties/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../src/app/page.tsx
 {
   type __IsExpected<Specific extends AppPageConfig<"/">> = Specific
@@ -164,6 +218,15 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../src/app/api/bounties/[id]/refund/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/bounties/[id]/refund">> = Specific
+  const handler = {} as typeof import("../../src/app/api/bounties/[id]/refund/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../src/app/api/bounties/[id]/route.ts
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/bounties/[id]">> = Specific
@@ -240,6 +303,15 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/bounties">> = Specific
   const handler = {} as typeof import("../../src/app/api/bounties/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/api/demo/run-killer-bounty/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/demo/run-killer-bounty">> = Specific
+  const handler = {} as typeof import("../../src/app/api/demo/run-killer-bounty/route.js")
   type __Check = __IsExpected<typeof handler>
   // @ts-ignore
   type __Unused = __Check
