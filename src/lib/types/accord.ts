@@ -36,7 +36,10 @@ export type LoginWithSignatureInput = z.infer<typeof LoginWithSignatureSchema>;
 export const BountyStatusEnum = z.enum([
   "OPEN",
   "IN_COMPETITION",
+  "COMPETING",
+  "SUBMISSIONS_LOCKED",
   "EVALUATING",
+  "RANKED",
   "SETTLING",
   "SETTLED",
   "EXPIRED",
@@ -48,8 +51,32 @@ export const CompetitionModeEnum = z.enum([
   "RACE_TO_FIRST_VALID",
   "BEST_SCORE_DEADLINE",
   "CONSENSUS_MULTI_AGENT",
+  "TOURNAMENT",
 ]);
 export type CompetitionMode = z.infer<typeof CompetitionModeEnum>;
+
+export const EvaluationWeightsSchema = z.object({
+  correctness: z.number().min(0).max(1).default(0.4),
+  completeness: z.number().min(0).max(1).default(0.3),
+  securityAndRobustness: z.number().min(0).max(1).default(0.15),
+  performanceAndEfficiency: z.number().min(0).max(1).default(0.15),
+});
+export type EvaluationWeights = z.infer<typeof EvaluationWeightsSchema>;
+
+export interface TournamentRankingEntry {
+  rank: number;
+  agentId: string;
+  agentName: string;
+  walletAddress: string;
+  submissionId: string;
+  score: number;
+  verdict: "PASS" | "FAIL";
+  disqualified: boolean;
+  disqualificationReason?: string;
+  submittedAt: string | Date;
+  breakdown?: any;
+  tieBreakerApplied?: string;
+}
 
 export const EscrowStatusEnum = z.enum([
   "PENDING_DEPOSIT",
@@ -71,6 +98,12 @@ export const CreateBountySchema = z.object({
   competitionMode: CompetitionModeEnum.optional().default("RACE_TO_FIRST_VALID"),
   deadlineHours: z.number().positive().max(720).optional().default(24),
   maxCompetitors: z.number().int().positive().optional(),
+  maxParticipants: z.number().int().positive().optional().default(10),
+  competitionStartsAt: z.coerce.date().optional(),
+  registrationDeadline: z.coerce.date().optional(),
+  submissionDeadline: z.coerce.date().optional(),
+  minPassingScore: z.number().min(0).max(100).optional().default(70.0),
+  evaluationWeights: EvaluationWeightsSchema.optional(),
   minReputationRequired: z.number().min(0).optional().default(0),
   metadata: z.record(z.string(), z.any()).optional(),
   escrowTxHash: z.string().optional(),
@@ -92,7 +125,7 @@ export const JoinCompetitionSchema = z.object({
   agentId: z.string().min(3),
   stakeUsdc: z.number().min(0).default(0),
 });
-export type JoinCompetitionInput = z.infer<typeof JoinCompetitionSchema>;
+export type JoinCompetitionInput = z.input<typeof JoinCompetitionSchema>;
 
 // Submission Types
 export const DeliverableTypeEnum = z.enum([
@@ -108,7 +141,7 @@ export const CreateSubmissionSchema = z.object({
   agentId: z.string().min(3),
   deliverableType: DeliverableTypeEnum,
   deliverableUrl: z.string().url("Must be a valid deliverable URL"),
-  contentHash: z.string().regex(/^[a-fA-F0-9]{64}$/, "Must be a 64-character SHA-256 hash"),
+  contentHash: z.string().regex(/^[a-fA-F0-9]{64}$/, "Must be a 64-character SHA-256 hash").optional(),
   accordSignature: z.string().optional(),
   summary: z.string().min(10).max(5000),
   executionTrace: z.string().max(50000).optional(),

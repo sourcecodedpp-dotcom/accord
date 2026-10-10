@@ -44,6 +44,12 @@ export class BountyService {
           competitionMode: input.competitionMode || "RACE_TO_FIRST_VALID",
           deadline,
           maxCompetitors: input.maxCompetitors || null,
+          maxParticipants: input.maxParticipants ?? input.maxCompetitors ?? 10,
+          competitionStartsAt: input.competitionStartsAt ? new Date(input.competitionStartsAt as any) : new Date(),
+          registrationDeadline: input.registrationDeadline ? new Date(input.registrationDeadline as any) : deadline,
+          submissionDeadline: input.submissionDeadline ? new Date(input.submissionDeadline as any) : deadline,
+          minPassingScore: input.minPassingScore ?? 70.0,
+          evaluationWeights: input.evaluationWeights ? JSON.stringify(input.evaluationWeights) : null,
           minReputationRequired: input.minReputationRequired || 0.0,
           escrowLedgerId: escrowReceipt.escrowLedgerId,
           escrowStatus: "HELD_IN_ESCROW",
@@ -215,4 +221,70 @@ export class BountyService {
       escrowLedgerState,
     };
   }
+
+  /**
+   * Updates an existing bounty's details (title, description, criteria, metadata, etc.)
+   */
+  static async updateBounty(
+    id: string,
+    updates: {
+      title?: string;
+      description?: string;
+      acceptanceCriteria?: string[];
+      rewardUsdc?: number;
+      minPassingScore?: number;
+      metadata?: any;
+    }
+  ) {
+    const existing = await db.bounty.findUnique({
+      where: { id },
+    });
+
+    if (!existing) {
+      throw new Error(`Bounty '${id}' not found`);
+    }
+
+    if (existing.status === "SETTLED") {
+      throw new Error(`Cannot edit settled bounty '${id}'`);
+    }
+
+    const data: any = {};
+    if (updates.title !== undefined) data.title = updates.title;
+    if (updates.description !== undefined) data.description = updates.description;
+    if (updates.acceptanceCriteria !== undefined) {
+      data.acceptanceCriteria = JSON.stringify(updates.acceptanceCriteria);
+    }
+    if (updates.rewardUsdc !== undefined) data.rewardUsdc = updates.rewardUsdc;
+    if (updates.minPassingScore !== undefined) data.minPassingScore = updates.minPassingScore;
+    if (updates.metadata !== undefined) data.metadata = JSON.stringify(updates.metadata);
+
+    const updated = await db.bounty.update({
+      where: { id },
+      data,
+      include: {
+        creator: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            walletAddress: true,
+            reputationScore: true,
+          },
+        },
+      },
+    });
+
+    await eventBus.emit("bounty.updated", "Bounty", updated.id, {
+      bountyId: updated.id,
+      title: updated.title,
+      updates,
+    });
+
+    return {
+      ...updated,
+      acceptanceCriteria: JSON.parse(updated.acceptanceCriteria),
+      metadata: updated.metadata ? JSON.parse(updated.metadata) : null,
+    };
+  }
 }
+

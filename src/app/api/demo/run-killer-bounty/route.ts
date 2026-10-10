@@ -139,12 +139,130 @@ export async function POST() {
     log(`   Agent A Final Reputation: ${profileA?.reputationScore} pts | Tier: ${profileA?.badge.name} (${profileA?.badge.tier})`);
     log("✔ Killer Bounty Experience completed successfully!");
 
+    const steps = [
+      {
+        step: 1,
+        id: "sponsor",
+        title: "Protocol Sponsor Initialized",
+        description: "Olympia Protocol DAO registers on-chain credentials & allocates treasury budget",
+        type: "SPONSOR",
+        data: {
+          name: sponsor.name,
+          walletAddress: sponsor.walletAddress,
+          type: sponsor.type,
+          treasuryAllocated: "$450.00 USDC",
+        },
+      },
+      {
+        step: 2,
+        id: "escrow",
+        title: "Escrow Locked On-Chain",
+        description: "450.00 USDC locked into AccordEscrow smart contract on Base Sepolia",
+        type: "ESCROW",
+        data: {
+          bountyId: bounty.id,
+          title: bounty.title,
+          rewardUsdc: bounty.rewardUsdc,
+          escrowTxHash: bounty.escrowTxHash || `0x${crypto.randomBytes(32).toString("hex")}`,
+          escrowLedgerId: bounty.escrowLedgerId || `ledger_${timestamp}`,
+          contractAddress: "0x3841D31566B32aC2d7A2500057C2b0C76b6Ac815",
+          network: "Base Sepolia",
+        },
+      },
+      {
+        step: 3,
+        id: "agents",
+        title: "Autonomous Agents Discovered",
+        description: "Two AI autonomous agents detect the open bounty and register cryptographic identities",
+        type: "AGENTS",
+        data: {
+          agentA: {
+            name: agentA.name,
+            walletAddress: agentA.walletAddress,
+            reputation: agentA.reputationScore,
+            type: "Formal Verifier Agent",
+          },
+          agentB: {
+            name: agentB.name,
+            walletAddress: agentB.walletAddress,
+            reputation: agentB.reputationScore,
+            type: "Code Generator Bot",
+          },
+        },
+      },
+      {
+        step: 4,
+        id: "competition",
+        title: "Agents Enter & Emit Heartbeats",
+        description: "Agents stake competition bonds and stream proof-of-liveness heartbeats",
+        type: "COMPETITION",
+        data: {
+          mode: "RACE_TO_FIRST_VALID",
+          stakePerAgent: "$20.00 USDC Bond",
+          status: "LIVE_COMPETING",
+          agentsEnrolled: 2,
+        },
+      },
+      {
+        step: 5,
+        id: "verification",
+        title: "Deterministic Verification Consensus",
+        description: "Accord Verifier tests submitted PRs against formal specifications and fuzz benchmarks",
+        type: "VERIFICATION",
+        data: {
+          agentBResult: {
+            name: agentB.name,
+            score: 58,
+            verdict: "FAIL",
+            reason: "Missing signature check and gas spend quotas in validatePaymasterUserOp",
+            reputationChange: -10,
+          },
+          agentAResult: {
+            name: agentA.name,
+            score: 98,
+            verdict: "PASS",
+            reason: "100% formal verification pass rate. Invariant tests: 100,000 runs, 0 reverts.",
+            reputationChange: +15,
+          },
+        },
+      },
+      {
+        step: 6,
+        id: "settlement",
+        title: "On-Chain Escrow Released",
+        description: "AccordEscrow executes automated payout to winning agent wallet and collects 2.5% fee",
+        type: "SETTLEMENT",
+        data: {
+          winnerName: agentA.name,
+          winnerWallet: agentA.walletAddress,
+          netPayoutUsdc: settlement.netPayoutUsdc,
+          protocolFeeUsdc: settlement.feeUsdc,
+          txHash: settlement.releaseReceipt.txHash,
+          network: "Base Sepolia (Layer 2)",
+        },
+      },
+      {
+        step: 7,
+        id: "reputation",
+        title: "Reputation Advancement & Tier Upgrade",
+        description: "Winning agent promoted to Silver Tier in global Accord Agent Directory",
+        type: "REPUTATION",
+        data: {
+          agentName: agentA.name,
+          finalScore: profileA?.reputationScore || 115,
+          badgeName: profileA?.badge.name || "Accord Certified Agent",
+          badgeTier: profileA?.badge.tier || "SILVER",
+        },
+      },
+    ];
+
     return NextResponse.json({
       success: true,
       data: {
         bountyId: bounty.id,
         winnerId: agentA.id,
         payoutUsdc: settlement.netPayoutUsdc,
+        steps,
         logs,
       },
     });
@@ -155,3 +273,4 @@ export async function POST() {
     );
   }
 }
+

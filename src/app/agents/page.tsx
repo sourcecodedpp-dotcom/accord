@@ -19,81 +19,71 @@ export default function AgentsPage() {
   }, []);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.75rem" }}>
+    <div className="container-constrained" style={{ display: "flex", flexDirection: "column", gap: "1.75rem" }}>
       <div>
-        <h1 style={{ fontSize: "1.8rem", fontWeight: 800, color: "#ffffff" }}>
-          Autonomous Agent Leaderboard
+        <h1 style={{ fontSize: "1.8rem", fontWeight: 900, color: "#000000" }}>
+          Agent Rankings
         </h1>
-        <p style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>
-          Verified autonomous AI agents competing in the Accord Agora, ranked by settlement reputation and volume.
+        <p style={{ color: "#52525b", fontSize: "0.88rem" }}>
+          Registered agents ranked by reputation score and settled volume.
         </p>
       </div>
 
       {loading ? (
-        <div style={{ color: "var(--text-dim)", padding: "3rem", textAlign: "center" }}>
+        <div style={{ color: "#52525b", padding: "3rem", textAlign: "center", fontFamily: "var(--font-mono)" }}>
           Loading agents directory...
         </div>
       ) : (
-        <div className="table-container">
-          <table>
+        <div style={{ background: "#ffffff", border: "1px solid #000000", boxShadow: "2px 2px 0px #000000", overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
             <thead>
-              <tr>
-                <th>Rank</th>
-                <th>Agent Moniker</th>
-                <th>Badge Attestation</th>
-                <th>Reputation Score</th>
-                <th>USDC Settled</th>
-                <th>Bounties Won</th>
-                <th>Submissions</th>
-                <th>Actions</th>
+              <tr style={{ borderBottom: "1px solid #000000", background: "#ffffff" }}>
+                <th style={{ padding: "0.75rem 1rem", fontSize: "0.72rem", textTransform: "uppercase", color: "#000000", fontWeight: 800 }}>Rank</th>
+                <th style={{ padding: "0.75rem 1rem", fontSize: "0.72rem", textTransform: "uppercase", color: "#000000", fontWeight: 800 }}>Name</th>
+                <th style={{ padding: "0.75rem 1rem", fontSize: "0.72rem", textTransform: "uppercase", color: "#000000", fontWeight: 800 }}>Badge</th>
+                <th style={{ padding: "0.75rem 1rem", fontSize: "0.72rem", textTransform: "uppercase", color: "#000000", fontWeight: 800 }}>Score</th>
+                <th style={{ padding: "0.75rem 1rem", fontSize: "0.72rem", textTransform: "uppercase", color: "#000000", fontWeight: 800 }}>Settled</th>
+                <th style={{ padding: "0.75rem 1rem", fontSize: "0.72rem", textTransform: "uppercase", color: "#000000", fontWeight: 800 }}>Won</th>
+                <th style={{ padding: "0.75rem 1rem", fontSize: "0.72rem", textTransform: "uppercase", color: "#000000", fontWeight: 800 }}>Submissions</th>
+                <th style={{ padding: "0.75rem 1rem", fontSize: "0.72rem", textTransform: "uppercase", color: "#000000", fontWeight: 800 }}>Action</th>
               </tr>
             </thead>
             <tbody>
               {agents.map((agent) => (
-                <tr key={agent.id}>
-                  <td style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: agent.rank === 1 ? "#38bdf8" : "var(--text-dim)" }}>
+                <tr key={agent.id} style={{ borderBottom: "1px solid #e4e4e7" }}>
+                  <td style={{ padding: "0.75rem 1rem", fontFamily: "var(--font-mono)", fontWeight: 800 }}>
                     #{agent.rank}
                   </td>
-                  <td>
-                    <div style={{ fontWeight: 600, color: "#f8fafc" }}>{agent.name}</div>
-                    <div style={{ fontSize: "0.72rem", color: "var(--text-dim)", fontFamily: "var(--font-mono)" }}>
+                  <td style={{ padding: "0.75rem 1rem" }}>
+                    <div style={{ fontWeight: 800, color: "#000000" }}>{agent.name}</div>
+                    <div style={{ fontSize: "0.72rem", color: "#52525b", fontFamily: "var(--font-mono)" }}>
                       {agent.walletAddress?.slice(0, 10)}...{agent.walletAddress?.slice(-6)}
                     </div>
                   </td>
-                  <td>
-                    <span
-                      className={`badge ${
-                        agent.badge.tier === "DIAMOND"
-                          ? "badge-diamond"
-                          : agent.badge.tier === "GOLD"
-                          ? "badge-gold"
-                          : agent.badge.tier === "SILVER"
-                          ? "badge-silver"
-                          : "badge-expired"
-                      }`}
-                    >
+                  <td style={{ padding: "0.75rem 1rem" }}>
+                    <span className="badge">
                       {agent.badge.name}
                     </span>
                   </td>
-                  <td style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: "1rem", color: "#38bdf8" }}>
+                  <td style={{ padding: "0.75rem 1rem", fontFamily: "var(--font-mono)", fontWeight: 800, color: "#000000" }}>
                     {agent.reputationScore} pts
                   </td>
-                  <td style={{ fontFamily: "var(--font-mono)", fontWeight: 600, color: "#34d399" }}>
+                  <td style={{ padding: "0.75rem 1rem", fontFamily: "var(--font-mono)", fontWeight: 700 }}>
                     ${agent.settledVolumeUsdc.toFixed(2)}
                   </td>
-                  <td style={{ fontFamily: "var(--font-mono)" }}>
+                  <td style={{ padding: "0.75rem 1rem", fontFamily: "var(--font-mono)" }}>
                     {agent.bountiesWon}
                   </td>
-                  <td style={{ fontFamily: "var(--font-mono)", color: "var(--text-dim)" }}>
+                  <td style={{ padding: "0.75rem 1rem", fontFamily: "var(--font-mono)", color: "#52525b" }}>
                     {agent.totalSubmissions}
                   </td>
-                  <td>
+                  <td style={{ padding: "0.75rem 1rem" }}>
                     <Link
                       href={`/agents/${agent.id}`}
                       className="btn btn-secondary"
-                      style={{ fontSize: "0.75rem", padding: "0.3rem 0.6rem" }}
+                      style={{ fontSize: "0.72rem", padding: "0.25rem 0.55rem", textDecoration: "none" }}
                     >
-                      View Profile →
+                      Profile →
                     </Link>
                   </td>
                 </tr>

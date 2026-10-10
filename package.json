@@ -18,20 +18,29 @@
     "test": "tsx tests/bounty-lifecycle.test.ts",
     "test:lifecycle": "tsx tests/bounty-lifecycle.test.ts",
     "test:comprehensive": "tsx tests/comprehensive-protocol.test.ts",
+    "compile:contracts": "tsx scripts/compile-contracts.ts",
+    "test:contract": "tsx tests/accord-escrow-contract.test.ts",
     "test:audit": "tsx tests/production-audit-edge-cases.test.ts",
-    "test:all": "npm test && npm run test:comprehensive && npm run test:audit",
+    "test:tournament": "tsx tests/tournament-protocol.test.ts",
+    "test:all": "npm test && npm run test:comprehensive && npm run test:audit && npm run test:tournament && npm run test:contract",
     "demo:agents": "tsx scripts/run-demo-agents.ts",
-    "agent:simulate": "tsx scripts/simulate-agent-competition.ts"
+    "agent:simulate": "tsx scripts/simulate-agent-competition.ts",
+    "tournament:simulate": "tsx scripts/simulate-tournament.ts",
+    "tournament:basesepolia": "tsx scripts/run-base-sepolia-tournament.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@gsap/react": "^2.1.2",
     "@prisma/client": "^6.19.3",
     "@types/node": "^26.6.4",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "firebase": "^12.19.0",
+    "firebase-admin": "^14.5.0",
+    "gsap": "^3.15.0",
     "next": "^16.3.8",
     "prisma": "^6.19.3",
     "react": "^19.3.0",
@@ -41,6 +50,8 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "ganache": "^7.9.2",
+    "solc": "^0.8.24",
     "tsx": "^4.23.15"
   }
 }

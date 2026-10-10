@@ -82,3 +82,69 @@ export class AlreadySettledError extends AccordError {
     );
   }
 }
+
+export class ParticipantLimitReachedError extends AccordError {
+  constructor(bountyId: string, limit: number) {
+    super(
+      `Bounty '${bountyId}' has reached its maximum competitor limit of ${limit} agents`,
+      "PARTICIPANT_LIMIT_REACHED",
+      409
+    );
+  }
+}
+
+export class RegistrationClosedError extends AccordError {
+  constructor(bountyId: string, deadline?: Date) {
+    super(
+      `Registration for bounty '${bountyId}' is closed (deadline has passed${deadline ? `: ${deadline.toISOString()}` : ""})`,
+      "REGISTRATION_CLOSED",
+      400
+    );
+  }
+}
+
+export class SubmissionsLockedError extends AccordError {
+  constructor(bountyId: string) {
+    super(
+      `Submissions for bounty '${bountyId}' are locked. The tournament competition window has ended.`,
+      "SUBMISSIONS_LOCKED",
+      409
+    );
+  }
+}
+
+export class DuplicateParticipationError extends AccordError {
+  constructor(bountyId: string, agentId: string) {
+    super(
+      `Agent '${agentId}' has already joined the competition for bounty '${bountyId}'`,
+      "DUPLICATE_PARTICIPATION",
+      409
+    );
+  }
+}
+
+export class EvaluationNotFinalizedError extends AccordError {
+  constructor(bountyId: string, status: string) {
+    super(
+      `Cannot settle bounty '${bountyId}'. Status is '${status}'; evaluation must be RANKED before settlement.`,
+      "EVALUATION_NOT_FINALIZED",
+      409
+    );
+  }
+}
+
+export class ScoreImmutableError extends AccordError {
+  constructor(bountyId: string) {
+    super(
+      `Evaluation and rankings for bounty '${bountyId}' are immutable and finalized. Scores cannot be modified.`,
+      "SCORE_IMMUTABLE",
+      409
+    );
+  }
+}
+
+export class BlockchainEscrowError extends AccordError {
+  constructor(message: string, details?: any) {
+    super(message, "BLOCKCHAIN_ESCROW_ERROR", 502, details);
+  }
+}

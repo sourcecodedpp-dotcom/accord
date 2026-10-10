@@ -4,6 +4,8 @@ export interface EscrowDepositReceipt {
   amountUsdc: number;
   depositorAddress: string;
   blockTimestamp: number;
+  blockNumber?: number;
+  chainId?: number;
   ledgerType: "mock" | "testnet" | "mainnet";
   isOnChain?: boolean;
 }
@@ -16,6 +18,7 @@ export interface EscrowReleaseReceipt {
   protocolFeeUsdc: number;
   blockTimestamp: number;
   blockNumber: number;
+  chainId?: number;
   ledgerType: "mock" | "testnet" | "mainnet";
   isOnChain?: boolean;
 }
@@ -26,6 +29,8 @@ export interface EscrowRefundReceipt {
   refundRecipientAddress: string;
   amountUsdc: number;
   blockTimestamp: number;
+  blockNumber?: number;
+  chainId?: number;
   ledgerType: "mock" | "testnet" | "mainnet";
   isOnChain?: boolean;
 }
@@ -39,6 +44,8 @@ export interface EscrowStateDetails {
   releaseTxHash?: string;
   recipientAddress?: string;
   settledAt?: Date;
+  isOnChain?: boolean;
+  chainId?: number;
 }
 
 export interface IAccordEscrowLedger {

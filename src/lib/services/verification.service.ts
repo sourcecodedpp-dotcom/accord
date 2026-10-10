@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { VerificationResult, VerifierType } from "@accord/protocol";
+import { VerificationResult, VerifierType, ScoreImmutableError, NotFoundError } from "@accord/protocol";
 import { VerifierRegistry } from "../verification/registry";
 import { ReputationService } from "./reputation.service";
 import { eventBus } from "./event.service";
@@ -23,10 +23,15 @@ export class VerificationService {
     });
 
     if (!submission) {
-      throw new Error(`Submission not found: ${params.submissionId}`);
+      throw new NotFoundError("Submission", params.submissionId);
     }
 
     const bounty = submission.bounty;
+
+    // Protection: Once a tournament bounty is RANKED or SETTLED, scores cannot be modified
+    if (bounty.status === "RANKED" || bounty.status === "SETTLED") {
+      throw new ScoreImmutableError(bounty.id);
+    }
     let criteria: string[] = [];
     try {
       criteria = JSON.parse(bounty.acceptanceCriteria);
@@ -91,16 +96,13 @@ export class VerificationService {
         },
       });
 
-      // If passed in RACE_TO_FIRST_VALID mode, advance bounty to EVALUATING
-      if (
-        verificationResult.verdict === "PASS" &&
-        bounty.competitionMode === "RACE_TO_FIRST_VALID" &&
-        bounty.status !== "SETTLED"
-      ) {
+      // If passed, designate winner and transition state for settlement
+      if (verificationResult.verdict === "PASS" && bounty.status !== "SETTLED") {
+        const nextStatus = bounty.competitionMode === "TOURNAMENT" ? "RANKED" : "EVALUATING";
         await tx.bounty.update({
           where: { id: bounty.id },
           data: {
-            status: "EVALUATING",
+            status: nextStatus,
             winnerAgentId: submission.agentId,
           },
         });

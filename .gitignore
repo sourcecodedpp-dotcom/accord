@@ -7,3 +7,5 @@ node_modules
 accord.config.json
 
 /generated/prisma
+.DS_Store
+*.tsbuildinfo

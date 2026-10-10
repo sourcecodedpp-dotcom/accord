@@ -1,7 +1,13 @@
 import { db } from "../db";
 import { JoinCompetitionInput } from "../types/accord";
 import { eventBus } from "./event.service";
-import { NotFoundError, ForbiddenError } from "@accord/protocol";
+import {
+  NotFoundError,
+  ForbiddenError,
+  RegistrationClosedError,
+  ParticipantLimitReachedError,
+  DuplicateParticipationError,
+} from "@accord/protocol";
 import crypto from "crypto";
 
 export class CompetitionService {
@@ -10,8 +16,9 @@ export class CompetitionService {
    */
   static async joinCompetition(
     bountyId: string,
-    input: JoinCompetitionInput,
-    callerParticipantId?: string
+    input: JoinCompetitionInput & { strict?: boolean },
+    callerParticipantId?: string,
+    options?: { strict?: boolean }
   ) {
     if (callerParticipantId && callerParticipantId !== input.agentId) {
       throw new ForbiddenError(
@@ -30,12 +37,18 @@ export class CompetitionService {
       throw new NotFoundError("Bounty", bountyId);
     }
 
-    if (bounty.status !== "OPEN" && bounty.status !== "IN_COMPETITION") {
+    if (
+      bounty.status !== "OPEN" &&
+      bounty.status !== "IN_COMPETITION" &&
+      bounty.status !== "COMPETING"
+    ) {
       throw new Error(`Bounty is not open for competition. Current status: ${bounty.status}`);
     }
 
-    if (new Date() > bounty.deadline) {
-      throw new Error(`Bounty competition deadline has passed: ${bounty.deadline.toISOString()}`);
+    const regDeadline = bounty.registrationDeadline || bounty.deadline;
+    if (new Date() > new Date(regDeadline) || new Date() > new Date(bounty.deadline)) {
+      const effectiveDeadline = new Date() > new Date(bounty.deadline) ? bounty.deadline : regDeadline;
+      throw new RegistrationClosedError(bountyId, effectiveDeadline);
     }
 
     const agent = await db.participant.findUnique({
@@ -56,11 +69,7 @@ export class CompetitionService {
       );
     }
 
-    if (bounty.maxCompetitors && bounty.competitionEntries.length >= bounty.maxCompetitors) {
-      throw new Error(`Bounty competitor limit reached: ${bounty.maxCompetitors}`);
-    }
-
-    // Check if already registered
+    // Check if already registered (protection against duplicate participation)
     const existing = await db.competitionEntry.findUnique({
       where: {
         bountyId_agentId: {
@@ -71,12 +80,29 @@ export class CompetitionService {
     });
 
     if (existing) {
+      const isStrict = input.strict ?? options?.strict ?? (bounty.competitionMode === "TOURNAMENT");
+      if (isStrict) {
+        throw new DuplicateParticipationError(bountyId, input.agentId);
+      }
       return existing;
+    }
+
+    const maxLimit = bounty.maxParticipants || bounty.maxCompetitors || 10;
+    if (bounty.competitionEntries.length >= maxLimit) {
+      throw new ParticipantLimitReachedError(bountyId, maxLimit);
     }
 
     const entryId = `entry_${crypto.randomUUID()}`;
 
     const entry = await db.$transaction(async (tx) => {
+      // Update bounty status to COMPETING if it was OPEN
+      if (bounty.status === "OPEN") {
+        await tx.bounty.update({
+          where: { id: bounty.id },
+          data: { status: "COMPETING" },
+        });
+      }
+
       const createdEntry = await tx.competitionEntry.create({
         data: {
           id: entryId,
@@ -98,13 +124,6 @@ export class CompetitionService {
         },
       });
 
-      // Update bounty status to IN_COMPETITION
-      if (bounty.status === "OPEN") {
-        await tx.bounty.update({
-          where: { id: bounty.id },
-          data: { status: "IN_COMPETITION" },
-        });
-      }
 
       return createdEntry;
     });

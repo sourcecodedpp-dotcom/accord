@@ -57,6 +57,46 @@ class EventBus {
       console.error("Failed to persist protocol audit log:", err);
     }
 
+    // 3. Mirror realtime event to Firestore collections
+    try {
+      const { FirebaseSyncService } = await import("../firebase/sync.service");
+      FirebaseSyncService.syncEvent(event).catch(() => {});
+
+      if (type === "bounty.created" || type === "bounty.status_changed") {
+        const bountyData = (payload as any)?.bounty || payload;
+        if (bountyData?.id) {
+          FirebaseSyncService.syncBounty(bountyData).catch(() => {});
+        }
+      } else if (type === "agent.joined_competition") {
+        const p = payload as any;
+        if (p?.bountyId) {
+          FirebaseSyncService.syncParticipant(p.bountyId, p).catch(() => {});
+        }
+      } else if (type === "submission.received") {
+        const s = (payload as any)?.submission || (payload as any);
+        if (s?.bountyId && s?.id) {
+          FirebaseSyncService.syncSubmission(s.bountyId, s).catch(() => {});
+        }
+      } else if (type === "verification.completed") {
+        const v = (payload as any)?.verification || (payload as any);
+        if (v?.id) {
+          FirebaseSyncService.syncVerification(v).catch(() => {});
+        }
+      } else if (type === "bounty.settled") {
+        const st = (payload as any)?.settlement || (payload as any);
+        if (st?.id) {
+          FirebaseSyncService.syncSettlement(st).catch(() => {});
+        }
+      } else if (type === "agent.registered") {
+        const ag = (payload as any)?.participant || (payload as any);
+        if (ag?.id) {
+          FirebaseSyncService.syncAgent(ag).catch(() => {});
+        }
+      }
+    } catch {
+      // Non-blocking
+    }
+
     return event;
   }
 

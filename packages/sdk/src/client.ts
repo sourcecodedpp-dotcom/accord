@@ -8,27 +8,11 @@ import {
   VerificationResult,
   ProtocolEvent,
 } from "@accord/protocol";
+import { AccordClientConfig, HttpRequestOptions } from "./types";
+import { AccordClientError } from "./errors";
 
-export interface AccordClientConfig {
-  baseUrl?: string;
-  apiKey?: string;
-  sessionToken?: string;
-}
-
-export class AccordClientError extends Error {
-  public readonly code: string;
-  public readonly status: number;
-  public readonly details?: any;
-
-  constructor(message: string, code = "ACCORD_CLIENT_ERROR", status = 400, details?: any) {
-    super(message);
-    this.name = "AccordClientError";
-    this.code = code;
-    this.status = status;
-    this.details = details;
-    Object.setPrototypeOf(this, new.target.prototype);
-  }
-}
+export type { AccordClientConfig, HttpRequestOptions };
+export { AccordClientError };
 
 export class AccordClient {
   private baseUrl: string;
@@ -209,6 +193,18 @@ export class AccordClient {
     return res.bounty;
   }
 
+  /**
+   * Updates an existing bounty's title, description, acceptance criteria, or reward.
+   */
+  async updateBounty(bountyId: string, updates: Record<string, any>): Promise<any> {
+    const res = await this.request(`/api/bounties/${bountyId}`, {
+      method: "PATCH",
+      body: updates,
+    });
+    return res.bounty;
+  }
+
+
   // ---------------------------------------------------------------------------
   // 3. COMPETITION PARTICIPATION
   // ---------------------------------------------------------------------------
@@ -315,7 +311,49 @@ export class AccordClient {
   }
 
   // ---------------------------------------------------------------------------
-  // 5. ESCROW & SETTLEMENT
+  // 5. TOURNAMENT LIFECYCLE & RANKINGS
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Locks tournament submissions once deadline expires or participants complete submissions.
+   */
+  async lockTournamentSubmissions(bountyId: string): Promise<any> {
+    return await this.request(`/api/bounties/${bountyId}/tournament/lock`, {
+      method: "POST",
+    });
+  }
+
+  /**
+   * Evaluates all tournament submissions, executes deterministic tie-breaking,
+   * establishes rankings, and selects the winner immutably.
+   */
+  async evaluateTournament(
+    bountyId: string,
+    verifierType = "MULTI_AGENT_CONSENSUS"
+  ): Promise<{
+    bountyId: string;
+    winner: any;
+    rankings: any[];
+    totalSubmissions: number;
+    validSubmissionsCount: number;
+    disqualifiedCount: number;
+  }> {
+    return await this.request(`/api/bounties/${bountyId}/tournament/evaluate`, {
+      method: "POST",
+      body: { verifierType },
+    });
+  }
+
+  /**
+   * Gets full tournament status, competitors, stage, and ranked leaderboard.
+   */
+  async getTournamentStatus(bountyId: string): Promise<any> {
+    const res = await this.request(`/api/bounties/${bountyId}/tournament`);
+    return res.tournament;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 6. ESCROW & SETTLEMENT
   // ---------------------------------------------------------------------------
 
   /**

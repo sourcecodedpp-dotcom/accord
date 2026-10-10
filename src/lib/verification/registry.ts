@@ -25,9 +25,12 @@ export class VerifierRegistry {
       return this.verifiers.get(type)!;
     }
 
-    // Default to LLM if key is present, otherwise deterministic
-    return process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY
-      ? this.verifiers.get("LLM_RUBRIC_EVALUATOR")!
-      : this.verifiers.get("DETERMINISTIC_SANDBOX")!;
+    // Default to ultra-fast DETERMINISTIC_SANDBOX (sub-millisecond) for reliable zero-latency execution.
+    // Only invoke LLM if explicitly requested or configured with a valid OpenAI key.
+    if (process.env.ACCORD_USE_LLM_VERIFIER === "true" && process.env.OPENAI_API_KEY) {
+      return this.verifiers.get("LLM_RUBRIC_EVALUATOR")!;
+    }
+
+    return this.verifiers.get("DETERMINISTIC_SANDBOX")!;
   }
 }

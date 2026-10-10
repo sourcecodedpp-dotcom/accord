@@ -42,9 +42,16 @@ model Bounty {
   creator               Participant       @relation("BountyCreator", fields: [creatorId], references: [id])
   creatorType           String            // "HUMAN_PRINCIPAL" | "AI_AGENT"
   status                String            // "OPEN" | "IN_COMPETITION" | "EVALUATING" | "SETTLING" | "SETTLED" | "EXPIRED" | "CANCELLED"
-  competitionMode       String            @default("RACE_TO_FIRST_VALID") // "RACE_TO_FIRST_VALID" | "BEST_SCORE_DEADLINE" | "CONSENSUS_MULTI_AGENT"
+  competitionMode       String            @default("RACE_TO_FIRST_VALID") // "RACE_TO_FIRST_VALID" | "BEST_SCORE_DEADLINE" | "CONSENSUS_MULTI_AGENT" | "TOURNAMENT"
   deadline              DateTime
   maxCompetitors        Int?
+  maxParticipants       Int               @default(10)
+  competitionStartsAt   DateTime?
+  registrationDeadline  DateTime?
+  submissionDeadline    DateTime?
+  minPassingScore       Float             @default(70.0)
+  evaluationWeights     String?           // JSON: { correctness, completeness, security, performance }
+  rankings              String?           // JSON: Array of { rank, agentId, submissionId, score, verdict, disqualified }
   minReputationRequired Float             @default(0.0)
   escrowLedgerId        String?           // Identifier in the Accord Escrow Ledger
   escrowStatus          String            @default("HELD_IN_ESCROW") // "PENDING_DEPOSIT" | "HELD_IN_ESCROW" | "RELEASED" | "REFUNDED"
@@ -78,20 +85,23 @@ model CompetitionEntry {
 }
 
 model Submission {
-  id               String            @id
-  bountyId         String
-  bounty           Bounty            @relation(fields: [bountyId], references: [id], onDelete: Cascade)
-  agentId          String
-  agent            Participant       @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  deliverableType  String            // "CODE_PR" | "DATA_ARTIFACT" | "RESEARCH_REPORT" | "API_ENDPOINT" | "SMART_CONTRACT"
-  deliverableUrl   String
-  contentHash      String            // SHA-256 hash of submission content
-  accordSignature  String?           // Cryptographic signature of submission content
-  summary          String
-  executionTrace   String?           // JSON or string execution logs, test outputs
-  status           String            @default("PENDING_VERIFICATION") // "PENDING_VERIFICATION" | "VERIFYING" | "ACCEPTED" | "REJECTED" | "SUPERSEDED"
-  score            Float?
-  submittedAt      DateTime          @default(now())
+  id                    String            @id
+  bountyId              String
+  bounty                Bounty            @relation(fields: [bountyId], references: [id], onDelete: Cascade)
+  agentId               String
+  agent                 Participant       @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  deliverableType       String            // "CODE_PR" | "DATA_ARTIFACT" | "RESEARCH_REPORT" | "API_ENDPOINT" | "SMART_CONTRACT"
+  deliverableUrl        String
+  contentHash           String            // SHA-256 hash of submission content
+  accordSignature       String?           // Cryptographic signature of submission content
+  summary               String
+  executionTrace        String?           // JSON or string execution logs, test outputs
+  status                String            @default("PENDING_VERIFICATION") // "PENDING_VERIFICATION" | "VERIFYING" | "ACCEPTED" | "REJECTED" | "SUPERSEDED"
+  score                 Float?
+  rank                  Int?
+  disqualified          Boolean           @default(false)
+  disqualificationReason String?
+  submittedAt           DateTime          @default(now())
 
   verificationRuns VerificationRun[]
   settlement       Settlement?
@@ -124,7 +134,12 @@ model Settlement {
   feeUsdc        Float       @default(0.0)
   escrowContract String?
   txHash         String
-  status         String      // "INITIATED" | "CONFIRMED" | "FAILED"
+  status         String      // "PENDING" | "CONFIRMED" | "FAILED"
+  blockNumber    Int?
+  chainId        Int?        // 84532 for Base Sepolia
+  isOnChain      Boolean     @default(false)
+  ledgerType     String      @default("mock") // "mock" | "testnet" | "mainnet"
+  errorMessage   String?
   settledAt      DateTime    @default(now())
 }
 

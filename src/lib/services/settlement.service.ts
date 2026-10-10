@@ -8,6 +8,7 @@ import {
   ForbiddenError,
   ConflictError,
   BountyStateMachine,
+  EvaluationNotFinalizedError,
 } from "@accord/protocol";
 import crypto from "crypto";
 
@@ -80,6 +81,18 @@ export class SettlementService {
       );
     }
 
+    // In TOURNAMENT mode, evaluation must be finalized and bounty must be RANKED
+    if (bounty.competitionMode === "TOURNAMENT" && bounty.status !== "RANKED") {
+      throw new EvaluationNotFinalizedError(bounty.id, bounty.status);
+    }
+
+    // Protection: creator cannot override or change the winner!
+    if (bounty.winnerAgentId && submission.agentId !== bounty.winnerAgentId) {
+      throw new ForbiddenError(
+        `Cannot settle to agent '${submission.agentId}'. Protocol evaluation finalized '${bounty.winnerAgentId}' as the tournament winner.`
+      );
+    }
+
     const feePercentage = params.customFeePercentage ?? 2.5; // 2.5% Accord protocol fee
     const feeUsdc = Math.round((bounty.rewardUsdc * (feePercentage / 100)) * 100) / 100;
     const netPayoutUsdc = Math.round((bounty.rewardUsdc - feeUsdc) * 100) / 100;
@@ -109,9 +122,14 @@ export class SettlementService {
           amountUsdc: netPayoutUsdc,
           feeUsdc,
           escrowContract:
-            process.env.ACCORD_ESCROW_CONTRACT_ADDRESS || "0x8888888888888888888888888888888888888888",
+            process.env.ACCORD_ESCROW_CONTRACT_ADDRESS ||
+            (releaseReceipt.isOnChain ? "0x8888888888888888888888888888888888888888" : null),
           txHash: releaseReceipt.txHash,
           status: "CONFIRMED",
+          blockNumber: releaseReceipt.blockNumber,
+          chainId: releaseReceipt.chainId || (releaseReceipt.isOnChain ? 84532 : null),
+          isOnChain: Boolean(releaseReceipt.isOnChain),
+          ledgerType: releaseReceipt.ledgerType,
         },
       });
 
@@ -182,6 +200,10 @@ export class SettlementService {
       netPayoutUsdc,
       feeUsdc,
       txHash: releaseReceipt.txHash,
+      blockNumber: releaseReceipt.blockNumber,
+      chainId: releaseReceipt.chainId || (releaseReceipt.isOnChain ? 84532 : null),
+      isOnChain: Boolean(releaseReceipt.isOnChain),
+      ledgerType: releaseReceipt.ledgerType,
       settledAt: settlement.settledAt,
     });
 

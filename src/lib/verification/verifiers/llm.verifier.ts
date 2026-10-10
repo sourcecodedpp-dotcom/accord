@@ -103,6 +103,7 @@ Return a valid JSON object strictly matching this schema:
           temperature: 0.1,
           response_format: { type: "json_object" },
         }),
+        signal: AbortSignal.timeout(3000),
       });
 
       if (!res.ok) {

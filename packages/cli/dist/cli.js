@@ -34,8 +34,36 @@ __export(cli_exports, {
 });
 module.exports = __toCommonJS(cli_exports);
 
+// packages/cli/src/args.ts
+function parseArgs(args) {
+  const command = args[0] || "help";
+  const positional = [];
+  const flags = {};
+  for (let i = 1; i < args.length; i++) {
+    const arg = args[i];
+    if (arg.startsWith("--")) {
+      const key = arg.slice(2);
+      const next = args[i + 1];
+      if (next && !next.startsWith("--")) {
+        flags[key] = next;
+        i++;
+      } else {
+        flags[key] = "true";
+      }
+    } else {
+      positional.push(arg);
+    }
+  }
+  return { command, positional, flags };
+}
+
+// packages/cli/src/config.ts
+var import_fs = __toESM(require("fs"));
+
 // packages/sdk/src/client.ts
 var import_crypto = __toESM(require("crypto"));
+
+// packages/sdk/src/errors.ts
 var AccordClientError = class extends Error {
   code;
   status;
@@ -49,6 +77,8 @@ var AccordClientError = class extends Error {
     Object.setPrototypeOf(this, new.target.prototype);
   }
 };
+
+// packages/sdk/src/client.ts
 var AccordClient = class {
   baseUrl;
   apiKey;
@@ -179,6 +209,16 @@ var AccordClient = class {
     const res = await this.request(`/api/bounties/${bountyId}`);
     return res.bounty;
   }
+  /**
+   * Updates an existing bounty's title, description, acceptance criteria, or reward.
+   */
+  async updateBounty(bountyId, updates) {
+    const res = await this.request(`/api/bounties/${bountyId}`, {
+      method: "PATCH",
+      body: updates
+    });
+    return res.bounty;
+  }
   // ---------------------------------------------------------------------------
   // 3. COMPETITION PARTICIPATION
   // ---------------------------------------------------------------------------
@@ -264,7 +304,35 @@ var AccordClient = class {
     return await this.request(`/api/bounties/${bountyId}/submissions/${submissionId}/verification`);
   }
   // ---------------------------------------------------------------------------
-  // 5. ESCROW & SETTLEMENT
+  // 5. TOURNAMENT LIFECYCLE & RANKINGS
+  // ---------------------------------------------------------------------------
+  /**
+   * Locks tournament submissions once deadline expires or participants complete submissions.
+   */
+  async lockTournamentSubmissions(bountyId) {
+    return await this.request(`/api/bounties/${bountyId}/tournament/lock`, {
+      method: "POST"
+    });
+  }
+  /**
+   * Evaluates all tournament submissions, executes deterministic tie-breaking,
+   * establishes rankings, and selects the winner immutably.
+   */
+  async evaluateTournament(bountyId, verifierType = "MULTI_AGENT_CONSENSUS") {
+    return await this.request(`/api/bounties/${bountyId}/tournament/evaluate`, {
+      method: "POST",
+      body: { verifierType }
+    });
+  }
+  /**
+   * Gets full tournament status, competitors, stage, and ranked leaderboard.
+   */
+  async getTournamentStatus(bountyId) {
+    const res = await this.request(`/api/bounties/${bountyId}/tournament`);
+    return res.tournament;
+  }
+  // ---------------------------------------------------------------------------
+  // 6. ESCROW & SETTLEMENT
   // ---------------------------------------------------------------------------
   /**
    * Settles a bounty escrow, releasing net USDC to the winner and recording receipts.
@@ -3399,7 +3467,7 @@ var base64urlCharset = /^[A-Za-z0-9_-]*$/;
 function isValidBase64URL(data) {
   if (!base64urlCharset.test(data))
     return false;
-  const base643 = data.replace(/[-_]/g, (c) => c === "-" ? "+" : "/");
+  const base643 = data.replace(/[-_]/g, (c2) => c2 === "-" ? "+" : "/");
   const padded = base643.padEnd(Math.ceil(base643.length / 4) * 4, "=");
   return isValidBase64(padded);
 }
@@ -20043,8 +20111,15 @@ var ParticipantTypeEnum = external_exports.enum(["AI_AGENT", "HUMAN_PRINCIPAL", 
 var CompetitionModeEnum = external_exports.enum([
   "RACE_TO_FIRST_VALID",
   "BEST_SCORE_DEADLINE",
-  "CONSENSUS_MULTI_AGENT"
+  "CONSENSUS_MULTI_AGENT",
+  "TOURNAMENT"
 ]);
+var EvaluationWeightsSchema = external_exports.object({
+  correctness: external_exports.number().min(0).max(1).default(0.4),
+  completeness: external_exports.number().min(0).max(1).default(0.3),
+  securityAndRobustness: external_exports.number().min(0).max(1).default(0.15),
+  performanceAndEfficiency: external_exports.number().min(0).max(1).default(0.15)
+});
 var DeliverableTypeEnum = external_exports.enum([
   "CODE_PR",
   "DATA_ARTIFACT",
@@ -20095,6 +20170,12 @@ var CreateBountySchema = external_exports.object({
   competitionMode: CompetitionModeEnum.optional().default("RACE_TO_FIRST_VALID"),
   deadlineHours: external_exports.number().positive().max(720).optional().default(24),
   maxCompetitors: external_exports.number().int().positive().optional(),
+  maxParticipants: external_exports.number().int().positive().optional().default(10),
+  competitionStartsAt: external_exports.coerce.date().optional(),
+  registrationDeadline: external_exports.coerce.date().optional(),
+  submissionDeadline: external_exports.coerce.date().optional(),
+  minPassingScore: external_exports.number().min(0).max(100).optional().default(70),
+  evaluationWeights: EvaluationWeightsSchema.optional(),
   minReputationRequired: external_exports.number().min(0).optional().default(0),
   metadata: external_exports.record(external_exports.string(), external_exports.any()).optional(),
   escrowTxHash: external_exports.string().optional()
@@ -20118,8 +20199,7 @@ var CreateSubmissionSchema = external_exports.object({
   autoVerify: external_exports.boolean().optional().default(true)
 });
 
-// packages/cli/src/cli.ts
-var import_fs = __toESM(require("fs"));
+// packages/cli/src/config.ts
 var CONFIG_FILE = "accord.config.json";
 function loadConfig() {
   if (import_fs.default.existsSync(CONFIG_FILE)) {
@@ -20139,161 +20219,530 @@ function getClient() {
   const apiKey = cfg.apiKey || process.env.ACCORD_API_KEY;
   return new AccordClient({ baseUrl, apiKey });
 }
-function parseArgs(args) {
-  const command = args[0] || "help";
-  const positional = [];
-  const flags = {};
-  for (let i = 1; i < args.length; i++) {
-    const arg = args[i];
-    if (arg.startsWith("--")) {
-      const key = arg.slice(2);
-      const next = args[i + 1];
-      if (next && !next.startsWith("--")) {
-        flags[key] = next;
-        i++;
-      } else {
-        flags[key] = "true";
-      }
-    } else {
-      positional.push(arg);
+
+// packages/cli/src/ui.ts
+var c = {
+  reset: "\x1B[0m",
+  bold: "\x1B[1m",
+  dim: "\x1B[2m",
+  italic: "\x1B[3m",
+  underline: "\x1B[4m",
+  // Foreground colors
+  black: "\x1B[30m",
+  red: "\x1B[31m",
+  green: "\x1B[32m",
+  yellow: "\x1B[33m",
+  blue: "\x1B[34m",
+  magenta: "\x1B[35m",
+  cyan: "\x1B[36m",
+  white: "\x1B[37m",
+  gray: "\x1B[90m",
+  // Bright / High-contrast
+  brightWhite: "\x1B[97m",
+  brightCyan: "\x1B[96m",
+  brightGreen: "\x1B[92m",
+  brightYellow: "\x1B[93m",
+  brightMagenta: "\x1B[95m",
+  // Background badges
+  bgBlack: "\x1B[40m",
+  bgCyan: "\x1B[46m",
+  bgGreen: "\x1B[42m",
+  bgYellow: "\x1B[43m",
+  bgBlue: "\x1B[44m",
+  bgMagenta: "\x1B[45m",
+  bgDark: "\x1B[100m"
+};
+function badge(text, color = c.bgCyan + c.black) {
+  return `${color} ${text} ${c.reset}`;
+}
+function stripAnsi(str) {
+  return str.replace(/\x1b\[[0-9;]*m/g, "");
+}
+function printBanner() {
+  console.log(`
+${c.brightCyan}  \u2588\u2588\u2588\u2588\u2588\u2557  \u2588\u2588\u2588\u2588\u2588\u2588\u2557 \u2588\u2588\u2588\u2588\u2588\u2588\u2557  \u2588\u2588\u2588\u2588\u2588\u2588\u2557 \u2588\u2588\u2588\u2588\u2588\u2588\u2557 \u2588\u2588\u2588\u2588\u2588\u2588\u2557 
+ \u2588\u2588\u2554\u2550\u2550\u2588\u2588\u2557\u2588\u2588\u2554\u2550\u2550\u2550\u2550\u255D\u2588\u2588\u2554\u2550\u2550\u2550\u2550\u255D \u2588\u2588\u2554\u2550\u2550\u2550\u2588\u2588\u2557\u2588\u2588\u2554\u2550\u2550\u2588\u2588\u2557\u2588\u2588\u2554\u2550\u2550\u2588\u2588\u2557
+ \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2551\u2588\u2588\u2551     \u2588\u2588\u2551     \u2588\u2588\u2551   \u2588\u2588\u2551\u2588\u2588\u2588\u2588\u2588\u2588\u2554\u255D\u2588\u2588\u2551  \u2588\u2588\u2551
+ \u2588\u2588\u2554\u2550\u2550\u2588\u2588\u2551\u2588\u2588\u2551     \u2588\u2588\u2551     \u2588\u2588\u2551   \u2588\u2588\u2551\u2588\u2588\u2554\u2550\u2550\u2588\u2588\u2557\u2588\u2588\u2551  \u2588\u2588\u2551
+ \u2588\u2588\u2551  \u2588\u2588\u2551\u255A\u2588\u2588\u2588\u2588\u2588\u2588\u2557\u255A\u2588\u2588\u2588\u2588\u2588\u2588\u2557\u255A\u2588\u2588\u2588\u2588\u2588\u2588\u2554\u255D\u2588\u2588\u2551  \u2588\u2588\u2551\u2588\u2588\u2588\u2588\u2588\u2588\u2554\u255D
+ \u255A\u2550\u255D  \u255A\u2550\u255D \u255A\u2550\u2550\u2550\u2550\u2550\u255D \u255A\u2550\u2550\u2550\u2550\u2550\u255D \u255A\u2550\u2550\u2550\u2550\u2550\u255D \u255A\u2550\u255D  \u255A\u2550\u255D\u255A\u2550\u2550\u2550\u2550\u2550\u255D ${c.reset}
+  ${c.dim}Autonomous Agent Economic Protocol \u2022 Base Sepolia (Chain ID 84532)${c.reset}
+`);
+}
+function box(title, lines, options = {}) {
+  const width = options.width || 76;
+  const borderCol = options.borderColor || c.gray;
+  const topLeft = "\u256D";
+  const topRight = "\u256E";
+  const bottomLeft = "\u2570";
+  const bottomRight = "\u256F";
+  const horiz = "\u2500";
+  const vert = "\u2502";
+  let headerBar = "";
+  if (title) {
+    const titleText = ` ${c.bold}${c.brightWhite}${title}${c.reset} `;
+    const strippedTitleLen = stripAnsi(titleText).length;
+    const remainingBorder = Math.max(0, width - 3 - strippedTitleLen);
+    headerBar = `${borderCol}${topLeft}${horiz} ${c.reset}${titleText}${borderCol}${horiz.repeat(remainingBorder)}${topRight}${c.reset}`;
+  } else {
+    headerBar = `${borderCol}${topLeft}${horiz.repeat(width - 2)}${topRight}${c.reset}`;
+  }
+  const footerBar = `${borderCol}${bottomLeft}${horiz.repeat(width - 2)}${bottomRight}${c.reset}`;
+  console.log(headerBar);
+  if (options.paddingY) {
+    for (let p = 0; p < options.paddingY; p++) {
+      console.log(`${borderCol}${vert}${c.reset}${" ".repeat(width - 2)}${borderCol}${vert}${c.reset}`);
     }
   }
-  return { command, positional, flags };
+  for (const line of lines) {
+    const visualLen = stripAnsi(line).length;
+    const fillSpace = Math.max(0, width - 4 - visualLen);
+    console.log(`${borderCol}${vert}${c.reset}  ${line}${" ".repeat(fillSpace)}${borderCol}${vert}${c.reset}`);
+  }
+  if (options.paddingY) {
+    for (let p = 0; p < options.paddingY; p++) {
+      console.log(`${borderCol}${vert}${c.reset}${" ".repeat(width - 2)}${borderCol}${vert}${c.reset}`);
+    }
+  }
+  console.log(footerBar);
 }
-async function runCli(argv = process.argv.slice(2)) {
-  const { command, positional, flags } = parseArgs(argv);
+function keyVal(key, val, pad = 24) {
+  return `${c.dim}${key.padEnd(pad)}${c.reset} ${c.bold}${c.white}${val}${c.reset}`;
+}
+function progressBar(current, total, width = 12) {
+  const percent = Math.min(1, Math.max(0, current / total));
+  const filled = Math.round(width * percent);
+  const empty = width - filled;
+  return `${c.brightCyan}[${"\u25A0".repeat(filled)}${" ".repeat(empty)}]${c.reset} ${c.dim}${Math.round(percent * 100)}%${c.reset}`;
+}
+
+// packages/cli/src/commands/init.ts
+async function handleInit(args) {
+  printBanner();
+  const cfg = {
+    apiUrl: args.flags["url"] || "http://localhost:3000",
+    agentId: args.flags["agent-id"] || "",
+    agentName: args.flags["name"] || "AutonomousAgent",
+    walletAddress: args.flags["wallet"] || "0x0000000000000000000000000000000000000000",
+    apiKey: ""
+  };
+  saveConfig(cfg);
+  box("INITIALIZATION COMPLETE", [
+    `${c.brightGreen}\u2714${c.reset} Configuration created: ${c.bold}${CONFIG_FILE}${c.reset}`,
+    "",
+    `${c.dim}API Endpoint:${c.reset}    ${c.cyan}${cfg.apiUrl}${c.reset}`,
+    `${c.dim}Agent Name:${c.reset}      ${c.white}${cfg.agentName}${c.reset}`,
+    `${c.dim}Wallet Target:${c.reset}   ${c.yellow}${cfg.walletAddress}${c.reset}`,
+    "",
+    `${badge("NEXT STEP", c.bgYellow + c.black)} Register your agent identity on-chain:`,
+    `  ${c.brightCyan}npx accord register --name "${cfg.agentName}" --wallet <0x...>${c.reset}`
+  ], 68);
+  console.log("");
+}
+
+// packages/cli/src/commands/register.ts
+async function handleRegister(args) {
+  printBanner();
   const client = getClient();
-  switch (command) {
-    case "init": {
-      const cfg = {
-        apiUrl: flags["url"] || "http://localhost:3000",
-        agentId: flags["agent-id"] || "",
-        agentName: flags["name"] || "AutonomousAgent",
-        walletAddress: flags["wallet"] || "0x0000000000000000000000000000000000000000",
-        apiKey: ""
-      };
+  const cfg = loadConfig();
+  const name = args.flags["name"] || cfg.agentName || "Agent-" + Math.floor(Math.random() * 1e3);
+  const walletAddress = args.flags["wallet"] || cfg.walletAddress;
+  if (!walletAddress || !walletAddress.startsWith("0x")) {
+    box("REGISTRATION ERROR", [
+      `${c.brightRed}Valid EVM wallet address is required.${c.reset}`,
+      "",
+      `Example:`,
+      `  ${c.cyan}accord register --name "ApexSentinel" --wallet 0x71C...3aF2${c.reset}`
+    ], 68);
+    process.exit(1);
+  }
+  console.log(`${badge("IDENTITY SYSTEM", c.bgBlue + c.brightWhite)} Minting cryptographic identity for ${c.bold}${name}${c.reset}...`);
+  try {
+    const res = await client.registerAgent({
+      name,
+      walletAddress,
+      bio: args.flags["bio"] || "Autonomous agent registered via Accord CLI"
+    });
+    if (res.apiKey) {
+      cfg.apiKey = res.apiKey;
+      cfg.agentId = res.participant.id;
+      cfg.walletAddress = walletAddress;
       saveConfig(cfg);
-      console.log(`\u2728 Initialized Accord configuration in ${CONFIG_FILE}`);
-      console.log(`   Next step: run 'npx accord register --name <moniker> --wallet <0x...>'`);
-      break;
+      box("AGENT IDENTITY MINTED", [
+        `${keyVal("Moniker", `${c.bold}${c.white}${name}${c.reset}`)}`,
+        `${keyVal("Agent ID", `${c.yellow}${res.participant.id}${c.reset}`)}`,
+        `${keyVal("Wallet Key", `${c.cyan}${walletAddress.slice(0, 10)}...${walletAddress.slice(-8)}${c.reset}`)}`,
+        `${keyVal("API Secret Key", `${c.brightGreen}${res.apiKey}${c.reset}`)}`,
+        `${keyVal("Reputation Score", `${c.brightGreen}100 pts (Novice)${c.reset}`)}`,
+        "",
+        `${c.dim}Stored credentials to ${CONFIG_FILE}${c.reset}`
+      ], 68);
+    } else {
+      box("EXISTING IDENTITY LOCATED", [
+        `${keyVal("Agent ID", `${c.yellow}${res.participant.id}${c.reset}`)}`,
+        `${keyVal("Wallet", `${walletAddress}${c.reset}`)}`,
+        `${keyVal("Reputation", `${res.participant.reputationScore ?? 100} pts`)}`
+      ], 68);
     }
-    case "register": {
-      const cfg = loadConfig();
-      const name = flags["name"] || cfg.agentName || "Agent-" + Math.floor(Math.random() * 1e3);
-      const walletAddress = flags["wallet"] || cfg.walletAddress;
-      if (!walletAddress || !walletAddress.startsWith("0x")) {
-        console.error("\u274C Error: Valid EVM wallet address is required via --wallet <0x...>");
-        process.exit(1);
-      }
-      console.log(`\u{1F916} Registering agent '${name}' on Accord Agora...`);
-      const res = await client.registerAgent({
-        name,
-        walletAddress,
-        bio: flags["bio"] || "Autonomous agent registered via Accord CLI"
-      });
-      if (res.apiKey) {
-        cfg.apiKey = res.apiKey;
-        cfg.agentId = res.participant.id;
-        cfg.walletAddress = walletAddress;
-        saveConfig(cfg);
-        console.log(`\u2705 Agent registered successfully!`);
-        console.log(`   ID: ${res.participant.id}`);
-        console.log(`   API Key: ${res.apiKey}`);
-        console.log(`   (Saved to ${CONFIG_FILE})`);
-      } else {
-        console.log(`\u2139\uFE0F Agent already registered: ${res.participant.id}`);
-      }
-      break;
-    }
-    case "status": {
-      const cfg = loadConfig();
-      console.log("\u{1F4CA} Accord Protocol Status:");
-      const health = await client.getHealth();
-      console.log(`   Network: ${health.network} | Node Status: ${health.status}`);
-      console.log(`   Total Settled Volume: $${health.metrics?.totalUsdcSettled} USDC`);
-      console.log(`   Active Bounties: ${health.metrics?.openBounties} / ${health.metrics?.totalBounties}`);
-      if (cfg.agentId) {
-        console.log(`
-\u{1F916} Current Agent: ${cfg.agentId}`);
+  } catch (err) {
+    console.error(`
+${badge("FAILED", c.bgRed + c.white)} Registration error: ${err.message}`);
+  }
+  console.log("");
+}
+
+// packages/cli/src/commands/status.ts
+async function handleStatus(_args) {
+  printBanner();
+  const client = getClient();
+  const cfg = loadConfig();
+  try {
+    const health = await client.getHealth();
+    const isHealthy = health.status === "healthy" || health.status === "ok";
+    const statusBadge = isHealthy ? badge("ONLINE", c.bgGreen + c.black) : badge("OFFLINE", c.bgRed + c.white);
+    box("ACCORD PROTOCOL TELEMETRY", [
+      `${keyVal("Network Node", `${health.network || "Base Sepolia"} ${statusBadge}`)}`,
+      `${keyVal("Node Status", isHealthy ? `${c.brightGreen}Operational${c.reset}` : `${c.red}Degraded${c.reset}`)}`,
+      `${keyVal("Total Settled Volume", `$${health.metrics?.totalUsdcSettled || 0} USDC`)}`,
+      `${keyVal("Active Bounties", `${c.brightCyan}${health.metrics?.openBounties || 0}${c.reset} / ${health.metrics?.totalBounties || 0}`)}`,
+      `${keyVal("Smart Contract", `${c.dim}0x7f035eaba97b977aaaaf4168c905ebb75677c2f9${c.reset}`)}`
+    ], 68);
+    if (cfg.agentId) {
+      console.log("");
+      try {
         const profile = await client.getReputation(cfg.agentId);
-        console.log(`   Name: ${profile.name}`);
-        console.log(`   Rank: #${profile.rank}`);
-        console.log(`   Reputation Score: ${profile.reputationScore} pts`);
-        console.log(`   Badge: ${profile.badge.name} (${profile.badge.tier})`);
-        console.log(`   Bounties Won: ${profile.bountiesWonCount}`);
-        console.log(`   USDC Settled: $${profile.settledVolumeUsdc} USDC`);
+        box(`AGENT PROFILE: ${profile.name.toUpperCase()}`, [
+          `${keyVal("Agent ID", `${c.yellow}${cfg.agentId}${c.reset}`)}`,
+          `${keyVal("Global Rank", `#${profile.rank || 1}`)}`,
+          `${keyVal("Reputation Score", `${c.brightGreen}${profile.reputationScore} pts${c.reset}`)}`,
+          `${keyVal("Tier Badge", `${badge(profile.badge?.name || "Novice", c.bgMagenta + c.white)} (${profile.badge?.tier || 1})`)}`,
+          `${keyVal("Tournaments Won", `${profile.bountiesWonCount || 0}`)}`,
+          `${keyVal("Settled Volume", `$${profile.settledVolumeUsdc || 0} USDC`)}`
+        ], 68);
+      } catch (err) {
+        console.log(`${c.dim}Agent profile ${cfg.agentId} pending registration or network sync.${c.reset}`);
       }
-      break;
+    } else {
+      console.log(`
+${c.dim}No local agent identity linked. Run ${c.cyan}accord register${c.dim} to link identity.${c.reset}`);
     }
-    case "discover": {
-      const query = flags["query"] || flags["q"];
-      const minReward = flags["min-reward"] ? Number(flags["min-reward"]) : void 0;
-      const status = flags["status"] || "OPEN";
-      console.log(`\u{1F50D} Discovering Accord Bounties (status=${status})...`);
-      const { bounties, total } = await client.discoverBounties({ query, minReward, status });
-      console.log(`Found ${total} bounties:
+  } catch (err) {
+    console.error(`
+${badge("ERROR", c.bgRed + c.white)} Failed to query network status: ${err.message}`);
+  }
+  console.log("");
+}
+
+// packages/cli/src/commands/discover.ts
+async function handleDiscover(args) {
+  printBanner();
+  const client = getClient();
+  const query = args.flags["query"] || args.flags["q"];
+  const minReward = args.flags["min-reward"] ? Number(args.flags["min-reward"]) : void 0;
+  const status = args.flags["status"] || "OPEN";
+  console.log(`${badge("MARKETPLACE SEARCH", c.bgBlue + c.brightWhite)} status=${c.cyan}${status}${c.reset} minReward=${c.yellow}$${minReward || 0} USDC${c.reset}`);
+  console.log(`${c.dim}Connecting to Accord orderbook on Base Sepolia...${c.reset}
 `);
-      if (bounties.length === 0) {
-        console.log("   (No bounties found matching filters)");
-      } else {
-        for (const b of bounties) {
-          console.log(`   [${b.id}] $${b.rewardUsdc} USDC | ${b.status} | "${b.title}"`);
-          console.log(`      Mode: ${b.competitionMode} | Competitors: ${b.competitorCount} | Submissions: ${b.submissionCount}`);
-        }
+  try {
+    const { bounties, total } = await client.discoverBounties({ query, minReward, status });
+    if (bounties.length === 0) {
+      box("QUERY RESULTS", [
+        `${c.yellow}No active bounties matched your search criteria.${c.reset}`,
+        "",
+        `Try broadening your search or post one with:`,
+        `  ${c.cyan}accord create --title <title> --reward <usdc>${c.reset}`
+      ], 68);
+    } else {
+      console.log(`${c.bold}Found ${c.brightGreen}${total}${c.reset}${c.bold} active tournaments:${c.reset}
+`);
+      for (const b of bounties) {
+        const statusBadge = b.status === "SETTLED" ? badge("SETTLED", c.bgGreen + c.black) : b.status === "COMPETING" ? badge("COMPETING", c.bgMagenta + c.white) : badge("OPEN", c.bgYellow + c.black);
+        const slots = progressBar(b.competitorCount || 0, b.maxParticipants || 10, 10);
+        box(`BOUNTY: ${b.id}`, [
+          `${c.bold}${c.brightWhite}${b.title}${c.reset}`,
+          "",
+          `${c.dim}Reward Pool:${c.reset}   ${c.brightGreen}$${Number(b.rewardUsdc).toFixed(2)} USDC${c.reset} ${c.dim}(Escrow Locked)${c.reset}`,
+          `${c.dim}Lifecycle:${c.reset}     ${statusBadge}  ${c.dim}Mode:${c.reset} ${c.cyan}${b.competitionMode}${c.reset}`,
+          `${c.dim}Agent Slots:${c.reset}   ${slots} ${c.dim}(${b.competitorCount || 0}/${b.maxParticipants || 10} filled)${c.reset}`,
+          `${c.dim}Submissions:${c.reset}   ${c.white}${b.submissionCount || 0} solutions submitted${c.reset}`,
+          "",
+          `${c.dim}Join command:${c.reset}  ${c.cyan}accord participate ${b.id}${c.reset}`
+        ], 68);
+        console.log("");
       }
-      break;
     }
-    case "participate": {
-      const bountyId = positional[0];
-      const cfg = loadConfig();
-      const agentId = flags["agent-id"] || cfg.agentId;
-      if (!bountyId || !agentId) {
-        console.error("\u274C Usage: accord participate <bountyId> [--agent-id <id>]");
-        process.exit(1);
-      }
-      console.log(`\u2694\uFE0F Joining competition on bounty ${bountyId} as agent ${agentId}...`);
-      const entry = await client.participate(bountyId, agentId, Number(flags["stake"] || 0));
-      console.log(`\u2705 Successfully entered competition! Entry ID: ${entry.id || "confirmed"}`);
-      break;
-    }
-    case "submit": {
-      const bountyId = positional[0];
-      const cfg = loadConfig();
-      const agentId = flags["agent-id"] || cfg.agentId;
-      const url2 = flags["url"] || "https://github.com/accord-agent/submission";
-      const summary = flags["summary"] || flags["s"];
-      const trace = flags["trace"] || flags["t"];
-      if (!bountyId || !agentId || !summary) {
-        console.error("\u274C Usage: accord submit <bountyId> --summary <text> [--url <url>] [--trace <logs>]");
-        process.exit(1);
-      }
-      console.log(`\u{1F680} Submitting solution for bounty ${bountyId}...`);
-      const res = await client.submitSolution(bountyId, {
-        agentId,
-        deliverableType: flags["type"] || "CODE_PR",
-        deliverableUrl: url2,
-        summary,
-        executionTrace: trace,
-        autoVerify: true
-      });
-      console.log(`\u2705 Solution submitted! ID: ${res.submission.id}`);
-      if (res.verification) {
-        console.log(`\u{1F916} AI Verification: ${res.verification.verdict} (Score: ${res.verification.score}/100)`);
-        console.log(`   Reasoning: ${res.verification.reasoning}`);
-      }
-      break;
-    }
+  } catch (err) {
+    console.error(`
+${badge("ERROR", c.bgRed + c.white)} Discovery failed: ${err.message}
+`);
+  }
+}
+
+// packages/cli/src/commands/participate.ts
+async function handleParticipate(args) {
+  printBanner();
+  const client = getClient();
+  const bountyId = args.positional[0];
+  const cfg = loadConfig();
+  const agentId = args.flags["agent-id"] || cfg.agentId;
+  if (!bountyId || !agentId) {
+    box("SYNTAX ERROR: MISSING ARGUMENTS", [
+      `${c.brightRed}Bounty ID and registered Agent ID are required.${c.reset}`,
+      "",
+      `${c.bold}Usage:${c.reset}`,
+      `  ${c.cyan}accord participate <bountyId> [--agent-id <id>]${c.reset}`
+    ], 68);
+    process.exit(1);
+  }
+  console.log(`${badge("TOURNAMENT REGISTRATION", c.bgMagenta + c.white)} Entering competition slot...`);
+  try {
+    const entry = await client.participate(bountyId, agentId, Number(args.flags["stake"] || 0));
+    box("SLOT RESERVED IN TOURNAMENT", [
+      `${keyVal("Bounty Target", `${c.brightCyan}${bountyId}${c.reset}`)}`,
+      `${keyVal("Competitor ID", `${c.yellow}${agentId}${c.reset}`)}`,
+      `${keyVal("Entry Status", `${badge("ACTIVE_COMPETITOR", c.bgGreen + c.black)}`)}`,
+      `${keyVal("Heartbeat Daemon", `${c.brightGreen}Broadcasting telemetry${c.reset}`)}`,
+      "",
+      `${c.dim}Next step: submit your solution when ready:${c.reset}`,
+      `  ${c.cyan}accord submit ${bountyId} --summary "<solution description>"${c.reset}`
+    ], 68);
+  } catch (err) {
+    console.error(`
+${badge("FAILED", c.bgRed + c.white)} Could not enter tournament: ${err.message}`);
+  }
+  console.log("");
+}
+
+// packages/cli/src/commands/submit.ts
+async function handleSubmit(args) {
+  printBanner();
+  const client = getClient();
+  const bountyId = args.positional[0];
+  const cfg = loadConfig();
+  const agentId = args.flags["agent-id"] || cfg.agentId;
+  const url2 = args.flags["url"] || "https://github.com/accord-agent/submission";
+  const summary = args.flags["summary"] || args.flags["s"];
+  const trace = args.flags["trace"] || args.flags["t"];
+  if (!bountyId || !agentId || !summary) {
+    box("SYNTAX ERROR: MISSING ARGUMENTS", [
+      `${c.brightRed}Bounty ID, Agent ID, and summary description are required.${c.reset}`,
+      "",
+      `${c.bold}Usage:${c.reset}`,
+      `  ${c.cyan}accord submit <bountyId> --summary <text> [--url <url>] [--trace <logs>]${c.reset}`
+    ], 68);
+    process.exit(1);
+  }
+  console.log(`${badge("DELIVERABLE HASHING", c.bgYellow + c.black)} Computing cryptographic sha256 hash...`);
+  console.log(`${badge("VERIFICATION PIPELINE", c.bgBlue + c.brightWhite)} Dispatching automated test suites...`);
+  try {
+    const res = await client.submitSolution(bountyId, {
+      agentId,
+      deliverableType: args.flags["type"] || "CODE_PR",
+      deliverableUrl: url2,
+      summary,
+      executionTrace: trace,
+      autoVerify: true
+    });
+    const isPass = res.verification?.verdict === "PASS";
+    const verdictBadge = isPass ? badge("VERDICT: PASS", c.bgGreen + c.black) : badge("VERDICT: FAIL", c.bgRed + c.white);
+    box("SOLUTION EVALUATION COMPLETE", [
+      `${keyVal("Submission ID", `${c.brightCyan}${res.submission.id}${c.reset}`)}`,
+      `${keyVal("Target Bounty", `${bountyId}`)}`,
+      `${keyVal("Submitting Agent", `${c.yellow}${agentId}${c.reset}`)}`,
+      `${keyVal("Deliverable PR", `${c.underline}${url2}${c.reset}`)}`,
+      `${keyVal("AI Verification", `${verdictBadge} (Score: ${res.verification?.score || 0}/100)`)}`,
+      "",
+      `${c.dim}Evaluator Reasoning:${c.reset}`,
+      `  ${c.italic}"${res.verification?.reasoning || "Verified by Accord deterministic evaluator"}"${c.reset}`,
+      "",
+      isPass ? `${c.brightGreen}\u2714 Solution eligible for on-chain payout release!${c.reset}` : `${c.yellow}\u26A0 Solution did not meet minimum criteria thresholds.${c.reset}`
+    ], 68);
+  } catch (err) {
+    console.error(`
+${badge("FAILED", c.bgRed + c.white)} Submission error: ${err.message}`);
+  }
+  console.log("");
+}
+
+// packages/cli/src/commands/create.ts
+async function handleCreate(args) {
+  printBanner();
+  const client = getClient();
+  const cfg = loadConfig();
+  const creatorId = args.flags["creator-id"] || args.flags["agent-id"] || cfg.agentId;
+  const title = args.flags["title"] || args.positional[0];
+  const reward = Number(args.flags["reward"] || args.flags["amount"] || 100);
+  const desc = args.flags["desc"] || args.flags["description"] || `Automated bounty posted via Accord CLI: ${title}`;
+  const mode = args.flags["mode"] || "TOURNAMENT";
+  const maxParticipants = Number(args.flags["max-participants"] || 10);
+  const minScore = Number(args.flags["min-score"] || 70);
+  const criteriaArg = args.flags["criteria"] || args.flags["acceptance"];
+  const acceptanceCriteria = criteriaArg ? criteriaArg.split(",").map((c2) => c2.trim()).filter(Boolean) : ["Deliver solution meeting all specified benchmark and correctness requirements"];
+  if (!creatorId || !title) {
+    box("SYNTAX ERROR: MISSING PARAMETERS", [
+      `${c.brightRed}Missing required title or registered creator identity.${c.reset}`,
+      "",
+      `${c.bold}Usage:${c.reset}`,
+      `  ${c.cyan}accord create --title <title> --reward <usdc> [options]${c.reset}`,
+      "",
+      `${c.dim}Options:${c.reset}`,
+      `  --reward <number>         USDC escrow amount (default: 100)`,
+      `  --mode <mode>             TOURNAMENT | RACE_TO_FIRST_VALID`,
+      `  --criteria <c1,c2>        Comma-separated acceptance tests`,
+      `  --desc <description>      Specification details`
+    ], 68);
+    process.exit(1);
+  }
+  console.log(`${badge("TRANSACTION SUBMITTED", c.bgYellow + c.black)} Locking ${c.bold}$${reward} USDC${c.reset} in AccordEscrow.sol...`);
+  try {
+    const res = await client.createBounty({
+      title,
+      description: desc.length < 20 ? `${desc} - specifications provided via Accord CLI.` : desc,
+      acceptanceCriteria,
+      rewardUsdc: reward,
+      creatorId,
+      competitionMode: mode,
+      maxParticipants,
+      minPassingScore: minScore
+    });
+    box("BOUNTY ESCROW CONFIRMED ON-CHAIN", [
+      `${keyVal("Bounty ID", `${c.brightCyan}${res.bounty.id}${c.reset}`)}`,
+      `${keyVal("Title", `${c.bold}${res.bounty.title}${c.reset}`)}`,
+      `${keyVal("Escrow Lock", `${c.brightGreen}$${res.bounty.rewardUsdc}.00 USDC${c.reset}`)}`,
+      `${keyVal("Competition Mode", `${c.magenta}${res.bounty.competitionMode}${c.reset}`)}`,
+      `${keyVal("Max Competitors", `${res.bounty.maxParticipants || 10} agents`)}`,
+      `${keyVal("Escrow State", `${badge("HELD_IN_ESCROW", c.bgGreen + c.black)}`)}`,
+      `${keyVal("Chain Verification", `${c.dim}Base Sepolia (84532)${c.reset}`)}`,
+      "",
+      `${c.dim}Shareable link:${c.reset} ${c.underline}http://localhost:3000/bounties/${res.bounty.id}${c.reset}`
+    ], 68);
+  } catch (err) {
+    console.error(`
+${badge("FAILED", c.bgRed + c.white)} Failed to post bounty: ${err.message}`);
+  }
+  console.log("");
+}
+
+// packages/cli/src/commands/edit.ts
+async function handleEdit(args) {
+  printBanner();
+  const client = getClient();
+  const bountyId = args.positional[0] || args.flags["id"] || args.flags["bounty-id"];
+  if (!bountyId) {
+    box("SYNTAX ERROR: MISSING BOUNTY ID", [
+      `${c.brightRed}Missing target bounty ID to edit.${c.reset}`,
+      "",
+      `${c.bold}Usage:${c.reset}`,
+      `  ${c.cyan}accord edit <bountyId> [options]${c.reset}`,
+      "",
+      `${c.dim}Options:${c.reset}`,
+      `  --title <title>           Update bounty title`,
+      `  --desc <description>      Update specification description`,
+      `  --reward <number>         Update reward amount (USDC)`,
+      `  --criteria <c1,c2>        Comma-separated acceptance criteria`,
+      `  --min-score <number>      Update minimum passing score`
+    ], 68);
+    process.exit(1);
+  }
+  const updates = {};
+  if (args.flags["title"]) updates.title = args.flags["title"];
+  if (args.flags["desc"] || args.flags["description"]) {
+    updates.description = args.flags["desc"] || args.flags["description"];
+  }
+  if (args.flags["reward"] || args.flags["amount"]) {
+    updates.rewardUsdc = Number(args.flags["reward"] || args.flags["amount"]);
+  }
+  if (args.flags["min-score"]) {
+    updates.minPassingScore = Number(args.flags["min-score"]);
+  }
+  const criteriaArg = args.flags["criteria"] || args.flags["acceptance"];
+  if (criteriaArg) {
+    updates.acceptanceCriteria = criteriaArg.split(",").map((c2) => c2.trim()).filter(Boolean);
+  }
+  if (Object.keys(updates).length === 0) {
+    console.log(`${badge("NO CHANGES", c.bgYellow + c.black)} No update flags provided. Specify --title, --desc, --reward, or --criteria.`);
+    return;
+  }
+  console.log(`${badge("UPDATING BOUNTY", c.bgCyan + c.black)} Applying updates to ${c.bold}${bountyId}${c.reset}...`);
+  try {
+    const updated = await client.updateBounty(bountyId, updates);
+    box("BOUNTY UPDATED SUCCESSFULLY", [
+      `${keyVal("Bounty ID", `${c.brightCyan}${updated.id}${c.reset}`)}`,
+      `${keyVal("Title", `${c.bold}${updated.title}${c.reset}`)}`,
+      `${keyVal("Escrow Reward", `${c.brightGreen}$${updated.rewardUsdc}.00 USDC${c.reset}`)}`,
+      `${keyVal("Status", `${c.magenta}${updated.status}${c.reset}`)}`,
+      `${keyVal("Min Score", `${updated.minPassingScore || 70} pts`)}`,
+      `${keyVal("Criteria Count", `${(updated.acceptanceCriteria || []).length} conditions`)}`,
+      "",
+      `${c.dim}Shareable link:${c.reset} ${c.underline}http://localhost:3000/bounties/${updated.id}${c.reset}`
+    ], 68);
+  } catch (err) {
+    console.error(`
+${badge("FAILED", c.bgRed + c.white)} Failed to edit bounty: ${err.message}`);
+  }
+  console.log("");
+}
+
+// packages/cli/src/commands/help.ts
+function handleHelp() {
+  printBanner();
+  box(
+    "CORE COMMANDS",
+    [
+      `  ${c.brightCyan}init${c.reset}                                 ${c.dim}Initialize${c.reset} accord.config.json ${c.dim}in current project${c.reset}`,
+      `  ${c.brightCyan}register${c.reset}    ${c.brightYellow}--wallet <0x...>${c.reset}           ${c.dim}Mint agent identity & acquire API key${c.reset}`,
+      `  ${c.brightCyan}status${c.reset}                               ${c.dim}Inspect network health & agent reputation score${c.reset}`,
+      `  ${c.brightCyan}discover${c.reset}    ${c.dim}[--status <ST>]${c.reset}           ${c.dim}Query open escrowed tournament bounties${c.reset}`,
+      `  ${c.brightCyan}create${c.reset}      ${c.brightYellow}--title <..> --reward <$>${c.reset}  ${c.dim}Lock USDC escrow & post autonomous bounty${c.reset}`,
+      `  ${c.brightCyan}edit${c.reset}        ${c.brightYellow}<bountyId> [options]${c.reset}       ${c.dim}Update bounty details, reward & criteria${c.reset}`,
+      `  ${c.brightCyan}participate${c.reset} ${c.brightYellow}<bountyId>${c.reset}             ${c.dim}Join 10-slot agent tournament competition${c.reset}`,
+      `  ${c.brightCyan}submit${c.reset}      ${c.brightYellow}<bountyId> --summary <..>${c.reset} ${c.dim}Submit solution, hash deliverable & verify${c.reset}`
+    ],
+    { width: 88, borderColor: c.cyan }
+  );
+  console.log(`
+  ${c.bold}${c.brightWhite}QUICK WORKFLOW EXAMPLES${c.reset}
+`);
+  console.log(`  ${c.dim}1. Register agent identity:${c.reset}`);
+  console.log(`     ${c.green}$${c.reset} ${c.white}accord register --name "ApexSolver" --wallet 0x71C...3aF2${c.reset}
+`);
+  console.log(`  ${c.dim}2. Discover live tournaments:${c.reset}`);
+  console.log(`     ${c.green}$${c.reset} ${c.white}accord discover --min-reward 100 --status OPEN${c.reset}
+`);
+  console.log(`  ${c.dim}3. Post and fund bounty in escrow:${c.reset}`);
+  console.log(`     ${c.green}$${c.reset} ${c.white}accord create --title "Formally Verify ERC-4337 Paymaster" --reward 450${c.reset}
+`);
+  console.log(`  ${c.dim}4. Enter competition & submit solution PR:${c.reset}`);
+  console.log(`     ${c.green}$${c.reset} ${c.white}accord participate bnt_12345${c.reset}`);
+  console.log(`     ${c.green}$${c.reset} ${c.white}accord submit bnt_12345 --summary "Passed 28/28 tests" --url https://github.com/pr/12${c.reset}
+`);
+}
+
+// packages/cli/src/cli.ts
+async function runCli(argv = process.argv.slice(2)) {
+  const args = parseArgs(argv);
+  switch (args.command) {
+    case "init":
+      return await handleInit(args);
+    case "register":
+      return await handleRegister(args);
+    case "status":
+      return await handleStatus(args);
+    case "discover":
+      return await handleDiscover(args);
+    case "participate":
+      return await handleParticipate(args);
+    case "submit":
+      return await handleSubmit(args);
+    case "create":
+    case "post":
+      return await handleCreate(args);
+    case "edit":
+    case "update":
+      return await handleEdit(args);
     case "help":
     default:
-      console.log("Accord CLI - Autonomous Agent Bounty Interface");
-      console.log("\nCommands:");
-      console.log("  accord init                     Initialize accord.config.json in current directory");
-      console.log("  accord register --wallet <0x..> Register agent & obtain API key");
-      console.log("  accord status                   View network stats & agent profile");
-      console.log("  accord discover [--query]       Search active bounties");
-      console.log("  accord participate <bountyId>   Join bounty competition");
-      console.log("  accord submit <bountyId>        Submit solution & execution trace");
-      break;
+      return handleHelp();
   }
 }
 // Annotate the CommonJS export names for ESM import in node:

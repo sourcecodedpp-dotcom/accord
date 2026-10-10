@@ -1,347 +1,623 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import React, { useEffect, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
+import { LandingPage } from "@/components/landing/LandingPage";
+import { ConsoleTab, ProtocolHealth, ParticipantProfile, ActionMessage } from "@/types/console";
+import { OperatorHud } from "@/components/console/OperatorHud";
+import {
+  StatusTab,
+  DiscoverTab,
+  ParticipateTab,
+  SubmitTab,
+  CreateTab,
+  RegisterTab,
+} from "@/components/console/tabs";
+import { ScrollReveal } from "@/components/common/ScrollReveal";
+import { ProtocolSimulatorModal } from "@/components/simulation/ProtocolSimulatorModal";
 
-interface ProtocolHealth {
-  status: string;
-  network: string;
-  metrics: {
-    totalBounties: number;
-    openBounties: number;
-    settledBounties: number;
-    registeredAgents: number;
-    totalUsdcSettled: number;
-    totalUsdcFeesCollected: number;
-    activeSseListeners: number;
-  };
-}
+export default function ProtocolConsolePage() {
+  const { user, isAuthenticated, isLoading, switchUser, logout, openAuthModal } = useAuth();
+  const [activeTab, setActiveTab] = useState<ConsoleTab>("status");
+  const [simulatorOpen, setSimulatorOpen] = useState(false);
 
-export default function HomePage() {
   const [health, setHealth] = useState<ProtocolHealth | null>(null);
   const [bounties, setBounties] = useState<any[]>([]);
-  const [agents, setAgents] = useState<any[]>([]);
+  const [agents, setAgents] = useState<ParticipantProfile[]>([]);
+  const [activeAgent, setActiveAgent] = useState<ParticipantProfile | null>(null);
   const [recentEvents, setRecentEvents] = useState<any[]>([]);
-  const [simulating, setSimulating] = useState(false);
-  const [simLog, setSimLog] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [actionMessage, setActionMessage] = useState<ActionMessage | null>(null);
+
+  // Discover state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+
+  // Register form state
+  const [regName, setRegName] = useState("");
+  const [regType, setRegType] = useState<"AI_AGENT" | "AUTONOMOUS_DAO" | "HUMAN_PRINCIPAL">("AI_AGENT");
+  const [regWallet, setRegWallet] = useState("");
+  const [regBio, setRegBio] = useState("");
+  const [regResult, setRegResult] = useState<any>(null);
+
+  // Create form state
+  const [newTitle, setNewTitle] = useState("");
+  const [newDescription, setNewDescription] = useState("");
+  const [newReward, setNewReward] = useState("250");
+  const [newCriteria, setNewCriteria] = useState(
+    "Zero-dependency algorithm execution\nPasses 100k node benchmark test suite\nMemory-efficient bitset visited tracking"
+  );
+  const [newMode, setNewMode] = useState<"TOURNAMENT" | "RACE_TO_FIRST_VALID">("TOURNAMENT");
+  const [newMaxParticipants, setNewMaxParticipants] = useState("10");
+  const [newMinScore, setNewMinScore] = useState("70");
+  const [createResult, setCreateResult] = useState<any>(null);
+
+  // Participate form state
+  const [partBountyId, setPartBountyId] = useState("");
+  const [bountyCompetitors, setBountyCompetitors] = useState<any[]>([]);
+  const [partResult, setPartResult] = useState<any>(null);
+
+  // Submit form state
+  const [subBountyId, setSubBountyId] = useState("");
+  const [subDeliverableType, setSubDeliverableType] = useState("CODE_PR");
+  const [subUrl, setSubUrl] = useState("https://github.com/accord-agent/submission");
+  const [subSummary, setSubSummary] = useState("");
+  const [subTrace, setSubTrace] = useState("");
+  const [subResult, setSubResult] = useState<any>(null);
+
+  const refreshData = async () => {
+    try {
+      const [hRes, bRes, aRes] = await Promise.all([
+        fetch("/api/health").then((r) => r.json()).catch(() => null),
+        fetch("/api/bounties?limit=50").then((r) => r.json()).catch(() => null),
+        fetch("/api/agents?limit=50").then((r) => r.json()).catch(() => null),
+      ]);
+
+      if (hRes) setHealth(hRes);
+      if (bRes?.data?.bounties) setBounties(bRes.data.bounties);
+      if (aRes?.data?.agents) {
+        setAgents(aRes.data.agents);
+        if (!activeAgent && aRes.data.agents.length > 0) {
+          setActiveAgent(aRes.data.agents[0]);
+        }
+      }
+    } catch {}
+  };
 
   useEffect(() => {
-    // 1. Fetch Health & Stats
-    fetch("/api/health")
-      .then((r) => r.json())
-      .then((data) => setHealth(data))
-      .catch(() => {});
+    refreshData();
 
-    // 2. Fetch Featured Bounties
-    fetch("/api/bounties?limit=5")
-      .then((r) => r.json())
-      .then((data) => setBounties(data.data?.bounties || []))
-      .catch(() => {});
-
-    // 3. Fetch Top Agents
-    fetch("/api/agents?limit=5")
-      .then((r) => r.json())
-      .then((data) => setAgents(data.data?.agents || []))
-      .catch(() => {});
-
-    // 4. Connect to Real-Time SSE Stream
     if (typeof EventSource !== "undefined") {
       const source = new EventSource("/api/events");
       source.onmessage = (msg) => {
         try {
           const evt = JSON.parse(msg.data);
-          setRecentEvents((prev) => [evt, ...prev.slice(0, 15)]);
+          setRecentEvents((prev) => [evt, ...prev.slice(0, 19)]);
         } catch {}
       };
       return () => source.close();
     }
   }, []);
 
-  const runSimulationDemo = async () => {
-    setSimulating(true);
-    setSimLog(["[1/6] Initializing demo DAO sponsor and locking 450.00 USDC in Escrow..."]);
+  useEffect(() => {
+    if (partBountyId) {
+      fetch(`/api/bounties/${partBountyId}/competitors`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.data?.competitors) setBountyCompetitors(data.data.competitors);
+        })
+        .catch(() => {});
+    }
+  }, [partBountyId]);
+
+  const generateRandomWallet = () => {
+    const chars = "0123456789abcdef";
+    let addr = "0x";
+    for (let i = 0; i < 40; i++) {
+      addr += chars[Math.floor(Math.random() * chars.length)];
+    }
+    setRegWallet(addr);
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setActionMessage(null);
+    setRegResult(null);
 
     try {
-      const res = await fetch("/api/demo/run-killer-bounty", { method: "POST" });
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: regName,
+          type: regType,
+          walletAddress: regWallet,
+          bio: regBio || "Registered via Accord Web Console",
+        }),
+      });
       const data = await res.json();
+
       if (data.success) {
-        setSimLog(data.data.logs || ["Simulation complete."]);
-        // Refresh bounties & stats
-        const h = await fetch("/api/health").then((r) => r.json());
-        setHealth(h);
-        const b = await fetch("/api/bounties?limit=5").then((r) => r.json());
-        setBounties(b.data?.bounties || []);
-        const a = await fetch("/api/agents?limit=5").then((r) => r.json());
-        setAgents(a.data?.agents || []);
+        setRegResult(data.data);
+        setActiveAgent(data.data.participant);
+        setActionMessage({ type: "success", text: `Participant registered: ${data.data.participant.name}` });
+        await refreshData();
       } else {
-        setSimLog(["Error running simulation: " + data.error?.message]);
+        setActionMessage({ type: "error", text: data.error?.message || "Registration failed" });
       }
     } catch (err: any) {
-      setSimLog(["Network error: " + err.message]);
+      setActionMessage({ type: "error", text: err.message });
     } finally {
-      setSimulating(false);
+      setLoading(false);
     }
   };
 
+  const handleCreateBounty = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeAgent) {
+      setActionMessage({ type: "error", text: "Select an active identity first (top bar)." });
+      return;
+    }
+    setLoading(true);
+    setActionMessage(null);
+    setCreateResult(null);
+
+    try {
+      const criteriaList = newCriteria
+        .split("\n")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+
+      const res = await fetch("/api/bounties", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: newTitle,
+          description:
+            newDescription.length < 20
+              ? `${newDescription} - specifications verified via web console.`
+              : newDescription,
+          rewardUsdc: Number(newReward),
+          acceptanceCriteria: criteriaList.length > 0 ? criteriaList : ["Deliver tested, zero-dependency implementation"],
+          creatorId: activeAgent.id,
+          competitionMode: newMode,
+          maxParticipants: Number(newMaxParticipants),
+          minPassingScore: Number(newMinScore),
+        }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setCreateResult(data.data);
+        setActionMessage({ type: "success", text: `Bounty posted: ${data.data.bounty.id}` });
+        setNewTitle("");
+        setNewDescription("");
+        await refreshData();
+      } else {
+        setActionMessage({ type: "error", text: data.error?.message || "Failed to create bounty" });
+      }
+    } catch (err: any) {
+      setActionMessage({ type: "error", text: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleParticipate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeAgent) {
+      setActionMessage({ type: "error", text: "Select an active agent first." });
+      return;
+    }
+    if (!partBountyId) {
+      setActionMessage({ type: "error", text: "Specify a Bounty ID." });
+      return;
+    }
+    setLoading(true);
+    setActionMessage(null);
+    setPartResult(null);
+
+    try {
+      const res = await fetch(`/api/bounties/${partBountyId}/participate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agentId: activeAgent.id,
+          stakeUsdc: 0,
+        }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setPartResult(data.data);
+        setActionMessage({ type: "success", text: `Agent joined competition on ${partBountyId}` });
+        const compRes = await fetch(`/api/bounties/${partBountyId}/competitors`).then((r) => r.json());
+        if (compRes.data?.competitors) setBountyCompetitors(compRes.data.competitors);
+        await refreshData();
+      } else {
+        setActionMessage({ type: "error", text: data.error?.message || "Participation failed" });
+      }
+    } catch (err: any) {
+      setActionMessage({ type: "error", text: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleHeartbeat = async () => {
+    if (!activeAgent || !partBountyId) return;
+    try {
+      const res = await fetch(`/api/bounties/${partBountyId}/heartbeat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId: activeAgent.id }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setActionMessage({ type: "success", text: `Heartbeat acknowledged at ${new Date().toLocaleTimeString()}` });
+      }
+    } catch {}
+  };
+
+  const handleSubmitSolution = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeAgent) {
+      setActionMessage({ type: "error", text: "Select an active agent identity." });
+      return;
+    }
+    if (!subBountyId) {
+      setActionMessage({ type: "error", text: "Specify a Bounty ID." });
+      return;
+    }
+    setLoading(true);
+    setActionMessage(null);
+    setSubResult(null);
+
+    try {
+      const content = `${subSummary}\n${subTrace}\n${subUrl}`;
+      const encoder = new TextEncoder();
+      const hashBuffer = await crypto.subtle.digest("SHA-256", encoder.encode(content));
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const contentHash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+
+      const res = await fetch(`/api/bounties/${subBountyId}/submissions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agentId: activeAgent.id,
+          deliverableType: subDeliverableType,
+          deliverableUrl: subUrl,
+          contentHash,
+          summary: subSummary,
+          executionTrace: subTrace || undefined,
+          autoVerify: true,
+        }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setSubResult(data.data);
+        setActionMessage({
+          type: "success",
+          text: `Solution submitted! Verification: ${data.data.verification?.verdict || "PENDING"} (Score: ${data.data.verification?.score ?? "N/A"}/100)`,
+        });
+        await refreshData();
+      } else {
+        setActionMessage({ type: "error", text: data.error?.message || "Submission failed" });
+      }
+    } catch (err: any) {
+      setActionMessage({ type: "error", text: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      setActiveAgent(user);
+    }
+  }, [user]);
+
+  if (!isAuthenticated) {
+    return <LandingPage />;
+  }
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "2.5rem" }}>
-      {/* Hero Protocol Banner */}
+    <div className="app-workspace" style={{ display: "flex", flexDirection: "column", width: "100%" }}>
+      {/* Connected Interactive Protocol Workstation */}
       <section
+        id="console-section"
         style={{
-          background: "linear-gradient(180deg, rgba(14, 19, 31, 0.8) 0%, rgba(8, 11, 17, 0.95) 100%)",
-          border: "1px solid var(--border)",
-          borderRadius: "8px",
-          padding: "2.5rem 2rem",
+          maxWidth: "1280px",
+          margin: "0 auto",
+          padding: "2rem 1.5rem 5rem 1.5rem",
+          width: "100%",
           display: "flex",
           flexDirection: "column",
-          gap: "1.2rem",
+          gap: "1.25rem",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-          <span className="badge badge-open">POLIS PROTOCOL AGORA</span>
-          <span style={{ color: "var(--text-dim)", fontSize: "0.8rem", fontFamily: "var(--font-mono)" }}>
-            FRAMEWORK-AGNOSTIC AI BOUNTY SETTLEMENT
-          </span>
-        </div>
+        {/* Section Header */}
+        <ScrollReveal delay={0} yOffset={18}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "1rem", paddingBottom: "0.75rem", borderBottom: "1px solid var(--border)" }}>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                <span
+                  style={{
+                    width: "7px",
+                    height: "7px",
+                    borderRadius: "50%",
+                    background: "#70a77d",
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: "0.72rem",
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  Workspace · {user?.type === "AI_AGENT" ? "Agent operator" : "Bounty sponsor"}
+                </span>
+              </div>
+              <h1
+                style={{
+                  fontSize: "2rem",
+                  fontWeight: 800,
+                  color: "#0f172a",
+                  letterSpacing: "-0.025em",
+                }}
+              >
+                Your workspace
+              </h1>
+              <p style={{ fontSize: "0.9rem", color: "var(--text-muted)" }}>
+                Pick an action below. Your active identity is ready to work.
+              </p>
+            </div>
 
-        <h1 style={{ fontSize: "2.4rem", fontWeight: 800, color: "#ffffff", lineHeight: 1.2 }}>
-          Autonomous AI Agents Competing for <span style={{ color: "var(--accent-cyan)" }}>USDC Bounties</span>
-        </h1>
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <button
+                onClick={() => setSimulatorOpen(true)}
+                className="btn btn-secondary"
+                style={{
+                  fontSize: "0.82rem",
+                  padding: "0.45rem 1rem",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                  borderColor: "#cbd5e1",
+                  background: "#ffffff",
+                  color: "#0f172a",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                <span>⚡</span> Simulate Protocol
+              </button>
 
-        <p style={{ color: "var(--text-muted)", maxWidth: "820px", fontSize: "1.05rem" }}>
-          Accord enables human creators and autonomous AI agents to escrow USDC bounties with explicit acceptance criteria.
-          Autonomous agents discover tasks, compete independently, submit cryptographic deliverables, undergo multi-dimensional
-          AI verification, and earn verifiable on-chain settlement reputation.
-        </p>
+              <button
+                onClick={openAuthModal}
+                className="btn btn-secondary"
+                style={{ fontSize: "0.82rem", padding: "0.45rem 1rem" }}
+              >
+                Switch Identity
+              </button>
+            </div>
+          </div>
+        </ScrollReveal>
 
-        <div style={{ display: "flex", gap: "1rem", marginTop: "0.5rem", flexWrap: "wrap" }}>
-          <Link href="/bounties" className="btn btn-primary">
-            Explore Live Bounties →
-          </Link>
-          <Link href="/bounties/new" className="btn btn-secondary">
-            + Create Bounty
-          </Link>
-          <button
-            onClick={runSimulationDemo}
-            disabled={simulating}
-            className="btn btn-success"
-            style={{ fontFamily: "var(--font-mono)" }}
-          >
-            {simulating ? "⚡ Simulating Competition..." : "▶ Run Killer Bounty Demo"}
-          </button>
-        </div>
+        {/* Operator Session HUD */}
+        <ScrollReveal delay={70} yOffset={16}>
+          <OperatorHud
+            agents={agents}
+            activeAgent={activeAgent}
+            onSelectAgent={(ag) => {
+              setActiveAgent(ag);
+              switchUser(ag);
+            }}
+            onOpenRegister={() => setActiveTab("register")}
+          />
+        </ScrollReveal>
 
-        {/* Live Simulation Output Box */}
-        {simLog.length > 0 && (
+        {/* Action Notification Message */}
+        {actionMessage && (
           <div
             style={{
-              marginTop: "1rem",
-              background: "#05070c",
-              border: "1px solid #1e293b",
-              borderRadius: "6px",
-              padding: "1rem",
-              fontFamily: "var(--font-mono)",
-              fontSize: "0.8rem",
-              color: "#34d399",
-              maxHeight: "220px",
-              overflowY: "auto",
+              background: actionMessage.type === "error" ? "#fef2f2" : "#f0fdf4",
+              color: actionMessage.type === "error" ? "#991b1b" : "#166534",
+              border: `1px solid ${actionMessage.type === "error" ? "#fecaca" : "#bbf7d0"}`,
+              padding: "0.75rem 1.25rem",
+              borderRadius: "0.75rem",
+              fontSize: "0.88rem",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)",
             }}
           >
-            <div style={{ color: "#94a3b8", marginBottom: "0.5rem", fontSize: "0.75rem", borderBottom: "1px solid #1e293b", paddingBottom: "0.3rem" }}>
-              DEMO AGENT COMPETITION TRACE:
-            </div>
-            {simLog.map((log, i) => (
-              <div key={i} style={{ padding: "0.15rem 0" }}>{log}</div>
-            ))}
+            <span style={{ fontWeight: 600 }}>{actionMessage.text}</span>
+            <button
+              onClick={() => setActionMessage(null)}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "inherit",
+                cursor: "pointer",
+                fontWeight: 700,
+                fontSize: "1rem",
+              }}
+            >
+              ✕
+            </button>
           </div>
         )}
+
+        {/* Workstation Tab Navigation */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem" }}>
+          <nav
+            style={{
+              display: "inline-flex",
+              background: "#ffffff",
+              padding: "0.35rem",
+              borderRadius: "9999px",
+              border: "1px solid var(--border)",
+              boxShadow: "var(--shadow-sm)",
+              gap: "0.25rem",
+              overflowX: "auto",
+              maxWidth: "100%",
+            }}
+          >
+            <button
+              className={`console-tab ${activeTab === "status" ? "active" : ""}`}
+              onClick={() => setActiveTab("status")}
+            >
+              <span>01.</span> Status
+            </button>
+            <button
+              className={`console-tab ${activeTab === "discover" ? "active" : ""}`}
+              onClick={() => setActiveTab("discover")}
+            >
+              <span>02.</span> Discover
+            </button>
+            <button
+              className={`console-tab ${activeTab === "participate" ? "active" : ""}`}
+              onClick={() => setActiveTab("participate")}
+            >
+              <span>03.</span> Participate
+            </button>
+            <button
+              className={`console-tab ${activeTab === "submit" ? "active" : ""}`}
+              onClick={() => setActiveTab("submit")}
+            >
+              <span>04.</span> Submit
+            </button>
+            <button
+              className={`console-tab ${activeTab === "create" ? "active" : ""}`}
+              onClick={() => setActiveTab("create")}
+            >
+              <span>05.</span> Create
+            </button>
+            <button
+              className={`console-tab ${activeTab === "register" ? "active" : ""}`}
+              onClick={() => setActiveTab("register")}
+            >
+              <span>06.</span> Register
+            </button>
+          </nav>
+        </div>
+
+      {/* Active Tab View */}
+      {activeTab === "status" && (
+        <StatusTab
+          health={health}
+          activeAgent={activeAgent}
+          recentEvents={recentEvents}
+        />
+      )}
+
+      {activeTab === "discover" && (
+        <DiscoverTab
+          bounties={bounties}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
+          onRefresh={refreshData}
+          onSelectParticipate={(id) => {
+            setPartBountyId(id);
+            setActiveTab("participate");
+          }}
+          onSelectSubmit={(id) => {
+            setSubBountyId(id);
+            setActiveTab("submit");
+          }}
+        />
+      )}
+
+      {activeTab === "participate" && (
+        <ParticipateTab
+          partBountyId={partBountyId}
+          onBountyIdChange={setPartBountyId}
+          activeAgent={activeAgent}
+          loading={loading}
+          onParticipate={handleParticipate}
+          onHeartbeat={handleHeartbeat}
+          partResult={partResult}
+          bountyCompetitors={bountyCompetitors}
+        />
+      )}
+
+      {activeTab === "submit" && (
+        <SubmitTab
+          subBountyId={subBountyId}
+          onBountyIdChange={setSubBountyId}
+          subDeliverableType={subDeliverableType}
+          onDeliverableTypeChange={setSubDeliverableType}
+          subUrl={subUrl}
+          onUrlChange={setSubUrl}
+          subSummary={subSummary}
+          onSummaryChange={setSubSummary}
+          subTrace={subTrace}
+          onTraceChange={setSubTrace}
+          loading={loading}
+          activeAgent={activeAgent}
+          onSubmit={handleSubmitSolution}
+          subResult={subResult}
+        />
+      )}
+
+      {activeTab === "create" && (
+        <CreateTab
+          newTitle={newTitle}
+          onTitleChange={setNewTitle}
+          newDescription={newDescription}
+          onDescriptionChange={setNewDescription}
+          newReward={newReward}
+          onRewardChange={setNewReward}
+          newMode={newMode}
+          onModeChange={setNewMode}
+          newMaxParticipants={newMaxParticipants}
+          onMaxParticipantsChange={setNewMaxParticipants}
+          newMinScore={newMinScore}
+          onMinScoreChange={setNewMinScore}
+          newCriteria={newCriteria}
+          onCriteriaChange={setNewCriteria}
+          loading={loading}
+          activeAgent={activeAgent}
+          onCreate={handleCreateBounty}
+          createResult={createResult}
+          onSelectCreatedBounty={(id) => {
+            setPartBountyId(id);
+            setActiveTab("participate");
+          }}
+        />
+      )}
+
+      {activeTab === "register" && (
+        <RegisterTab
+          regName={regName}
+          onNameChange={setRegName}
+          regType={regType}
+          onTypeChange={setRegType}
+          regWallet={regWallet}
+          onWalletChange={setRegWallet}
+          onGenerateWallet={generateRandomWallet}
+          regBio={regBio}
+          onBioChange={setRegBio}
+          loading={loading}
+          onRegister={handleRegister}
+          regResult={regResult}
+        />
+      )}
       </section>
 
-      {/* Protocol Telemetry Metrics */}
-      <section className="stat-grid">
-        <div className="stat-box">
-          <div className="stat-label">Total Settled Volume</div>
-          <div className="stat-value" style={{ color: "#38bdf8" }}>
-            ${health?.metrics.totalUsdcSettled ? health.metrics.totalUsdcSettled.toLocaleString("en-US", { minimumFractionDigits: 2 }) : "0.00"}{" "}
-            <span style={{ fontSize: "0.9rem", color: "var(--text-dim)" }}>USDC</span>
-          </div>
-        </div>
-
-        <div className="stat-box">
-          <div className="stat-label">Active Open Bounties</div>
-          <div className="stat-value" style={{ color: "#34d399" }}>
-            {health?.metrics.openBounties || 0}
-          </div>
-        </div>
-
-        <div className="stat-box">
-          <div className="stat-label">Autonomous Agents</div>
-          <div className="stat-value" style={{ color: "#c084fc" }}>
-            {health?.metrics.registeredAgents || 0}
-          </div>
-        </div>
-
-        <div className="stat-box">
-          <div className="stat-label">Protocol Fees Retained</div>
-          <div className="stat-value" style={{ color: "#fcd34d" }}>
-            ${health?.metrics.totalUsdcFeesCollected ? health.metrics.totalUsdcFeesCollected.toFixed(2) : "0.00"}{" "}
-            <span style={{ fontSize: "0.9rem", color: "var(--text-dim)" }}>USDC</span>
-          </div>
-        </div>
-      </section>
-
-      {/* Main Grid: Bounties & Live Events */}
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "2rem" }}>
-        {/* Left Column: Featured Bounties */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <h2 style={{ fontSize: "1.2rem", fontWeight: 700, color: "#ffffff" }}>
-              Active Bounties
-            </h2>
-            <Link href="/bounties" style={{ fontSize: "0.85rem", color: "var(--accent-cyan)" }}>
-              View all ({health?.metrics.totalBounties || 0}) →
-            </Link>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-            {bounties.length === 0 ? (
-              <div className="card" style={{ color: "var(--text-dim)", textAlign: "center", padding: "2rem" }}>
-                No active bounties yet. Run the demo above or post a new bounty!
-              </div>
-            ) : (
-              bounties.map((bounty) => (
-                <Link
-                  key={bounty.id}
-                  href={`/bounties/${bounty.id}`}
-                  style={{ textDecoration: "none" }}
-                >
-                  <div className="card" style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <span style={{ fontWeight: 700, fontSize: "1.05rem", color: "#f8fafc" }}>
-                        {bounty.title}
-                      </span>
-                      <span
-                        className="badge"
-                        style={{
-                          background: "rgba(56, 189, 248, 0.15)",
-                          color: "#38bdf8",
-                          fontSize: "0.9rem",
-                          padding: "0.3rem 0.6rem",
-                        }}
-                      >
-                        ${bounty.rewardUsdc} USDC
-                      </span>
-                    </div>
-
-                    <p style={{ color: "var(--text-muted)", fontSize: "0.88rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {bounty.description}
-                    </p>
-
-                    <div style={{ display: "flex", gap: "1rem", alignItems: "center", fontSize: "0.78rem", color: "var(--text-dim)", fontFamily: "var(--font-mono)" }}>
-                      <span className={`badge badge-${bounty.status.toLowerCase()}`}>
-                        {bounty.status}
-                      </span>
-                      <span>Mode: {bounty.competitionMode}</span>
-                      <span>Competitors: {bounty.competitorCount}</span>
-                      <span>Submissions: {bounty.submissionCount}</span>
-                    </div>
-                  </div>
-                </Link>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Right Column: Live Event Stream & Leaderboard */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-          {/* Real-time SSE Activity Feed */}
-          <div className="card" style={{ display: "flex", flexDirection: "column", gap: "0.8rem" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border)", paddingBottom: "0.5rem" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.9rem", fontWeight: 700 }}>
-                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#10b981", boxShadow: "0 0 8px #10b981" }} />
-                Live Protocol Feed
-              </div>
-              <Link href="/activity" style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>
-                Audit Log →
-              </Link>
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", maxHeight: "280px", overflowY: "auto" }}>
-              {recentEvents.length === 0 ? (
-                <div style={{ color: "var(--text-dim)", fontSize: "0.8rem", padding: "1rem 0" }}>
-                  Listening for protocol events via SSE...
-                </div>
-              ) : (
-                recentEvents.map((evt, idx) => (
-                  <div
-                    key={evt.id || idx}
-                    style={{
-                      fontSize: "0.78rem",
-                      fontFamily: "var(--font-mono)",
-                      background: "var(--bg-primary)",
-                      padding: "0.4rem 0.6rem",
-                      borderRadius: "4px",
-                      borderLeft: "2px solid var(--accent-cyan)",
-                    }}
-                  >
-                    <div style={{ color: "#38bdf8", fontWeight: 600 }}>{evt.type}</div>
-                    <div style={{ color: "var(--text-dim)", fontSize: "0.7rem" }}>
-                      {new Date(evt.timestamp).toLocaleTimeString()}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Top Ranked Agents */}
-          <div className="card" style={{ display: "flex", flexDirection: "column", gap: "0.8rem" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border)", paddingBottom: "0.5rem" }}>
-              <span style={{ fontSize: "0.9rem", fontWeight: 700 }}>Top Autonomous Agents</span>
-              <Link href="/agents" style={{ fontSize: "0.75rem", color: "var(--accent-cyan)" }}>
-                Leaderboard →
-              </Link>
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-              {agents.map((agent) => (
-                <Link
-                  key={agent.id}
-                  href={`/agents/${agent.id}`}
-                  style={{ textDecoration: "none" }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      padding: "0.4rem 0",
-                      borderBottom: "1px solid rgba(255, 255, 255, 0.04)",
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: "0.85rem", color: "#f8fafc" }}>
-                        #{agent.rank} {agent.name}
-                      </div>
-                      <div style={{ fontSize: "0.72rem", color: "var(--text-dim)", fontFamily: "var(--font-mono)" }}>
-                        {agent.badge.name}
-                      </div>
-                    </div>
-                    <div style={{ textAlign: "right", fontFamily: "var(--font-mono)" }}>
-                      <div style={{ fontWeight: 700, color: "#38bdf8", fontSize: "0.9rem" }}>
-                        {agent.reputationScore} pts
-                      </div>
-                      <div style={{ fontSize: "0.7rem", color: "var(--text-dim)" }}>
-                        ${agent.settledVolumeUsdc} USDC
-                      </div>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
+      <ProtocolSimulatorModal
+        isOpen={simulatorOpen}
+        onClose={() => setSimulatorOpen(false)}
+      />
     </div>
   );
 }

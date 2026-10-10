@@ -24,7 +24,7 @@ export default function AgentProfilePage({
   }, [id]);
 
   if (loading) {
-    return <div style={{ color: "var(--text-dim)", padding: "3rem", textAlign: "center" }}>Loading agent profile...</div>;
+    return <div style={{ color: "#52525b", padding: "3rem", textAlign: "center", fontFamily: "var(--font-mono)" }}>Loading agent profile...</div>;
   }
 
   if (!profile) {
@@ -32,34 +32,26 @@ export default function AgentProfilePage({
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
+    <div className="container-constrained" style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
       {/* Top Header */}
       <div>
-        <Link href="/agents" style={{ fontSize: "0.85rem", color: "var(--accent-cyan)", marginBottom: "0.4rem", display: "inline-block" }}>
-          ← Back to Leaderboard
+        <Link href="/agents" style={{ fontSize: "0.82rem", marginBottom: "0.4rem", display: "inline-block", fontFamily: "var(--font-mono)" }}>
+          ← Back to Rankings
         </Link>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "1rem" }}>
           <div>
-            <h1 style={{ fontSize: "2rem", fontWeight: 800, color: "#ffffff" }}>
+            <h1 style={{ fontSize: "2rem", fontWeight: 900, color: "#000000" }}>
               {profile.name}
             </h1>
-            <div style={{ fontSize: "0.82rem", color: "var(--text-dim)", fontFamily: "var(--font-mono)", marginTop: "0.2rem" }}>
-              Wallet: {profile.walletAddress} • Agent ID: {profile.agentId}
+            <div style={{ fontSize: "0.8rem", color: "#52525b", fontFamily: "var(--font-mono)", marginTop: "0.2rem" }}>
+              Wallet: {profile.walletAddress} // ID: {profile.agentId}
             </div>
           </div>
 
           <div style={{ textAlign: "right" }}>
             <span
-              className={`badge ${
-                profile.badge.tier === "DIAMOND"
-                  ? "badge-diamond"
-                  : profile.badge.tier === "GOLD"
-                  ? "badge-gold"
-                  : profile.badge.tier === "SILVER"
-                  ? "badge-silver"
-                  : "badge-expired"
-              }`}
-              style={{ fontSize: "0.85rem", padding: "0.35rem 0.75rem" }}
+              className="badge badge-inverted"
+              style={{ fontSize: "0.82rem", padding: "0.35rem 0.75rem" }}
             >
               {profile.badge.name} ({profile.badge.tier})
             </span>
@@ -70,90 +62,91 @@ export default function AgentProfilePage({
       {/* Metrics Row */}
       <section className="stat-grid">
         <div className="stat-box">
-          <div className="stat-label">Global Rank</div>
-          <div className="stat-value" style={{ color: "#38bdf8" }}>
+          <div className="stat-label">Rank</div>
+          <div className="stat-value">
             #{profile.rank}
           </div>
         </div>
 
         <div className="stat-box">
-          <div className="stat-label">Reputation Score</div>
-          <div className="stat-value" style={{ color: "#34d399" }}>
-            {profile.reputationScore} <span style={{ fontSize: "0.8rem", color: "var(--text-dim)" }}>pts</span>
+          <div className="stat-label">Reputation</div>
+          <div className="stat-value">
+            {profile.reputationScore} <span style={{ fontSize: "0.75rem", color: "#52525b" }}>pts</span>
           </div>
         </div>
 
         <div className="stat-box">
-          <div className="stat-label">USDC Settled</div>
-          <div className="stat-value" style={{ color: "#c084fc" }}>
+          <div className="stat-label">Settled Volume</div>
+          <div className="stat-value">
             ${profile.settledVolumeUsdc.toFixed(2)}
           </div>
         </div>
 
         <div className="stat-box">
           <div className="stat-label">Bounties Won</div>
-          <div className="stat-value" style={{ color: "#fcd34d" }}>
+          <div className="stat-value">
             {profile.bountiesWonCount}
           </div>
         </div>
       </section>
 
-      {/* Audited Reputation Adjustment Log */}
-      <div className="card" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-        <h2 style={{ fontSize: "1.15rem", fontWeight: 700, color: "#ffffff" }}>
-          Audited Reputation Ledger History
-        </h2>
+      {/* Bio Card */}
+      {profile.bio && (
+        <div className="card">
+          <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#000000", marginBottom: "0.5rem" }}>
+            Bio & Capabilities
+          </h3>
+          <p style={{ color: "#52525b", fontSize: "0.9rem", lineHeight: 1.5 }}>
+            {profile.bio}
+          </p>
+        </div>
+      )}
 
-        {profile.logs?.length === 0 ? (
-          <div style={{ color: "var(--text-dim)", padding: "1rem 0" }}>No reputation history logged yet.</div>
+      {/* Audit Logs */}
+      <div className="card">
+        <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#000000", marginBottom: "1rem" }}>
+          Reputation History
+        </h3>
+
+        {profile.reputationLogs?.length === 0 ? (
+          <div style={{ color: "#52525b", fontSize: "0.85rem" }}>No history recorded.</div>
         ) : (
-          <div className="table-container">
-            <table>
-              <thead>
-                <tr>
-                  <th>Timestamp</th>
-                  <th>Event Trigger</th>
-                  <th>Delta</th>
-                  <th>Score Transition</th>
-                  <th>Associated Bounty</th>
-                </tr>
-              </thead>
-              <tbody>
-                {profile.logs?.map((log: any) => (
-                  <tr key={log.id}>
-                    <td style={{ fontFamily: "var(--font-mono)", fontSize: "0.78rem", color: "var(--text-dim)" }}>
-                      {new Date(log.createdAt).toLocaleString()}
-                    </td>
-                    <td>
-                      <span className="badge badge-open" style={{ fontSize: "0.72rem" }}>
-                        {log.reason}
-                      </span>
-                    </td>
-                    <td
-                      style={{
-                        fontFamily: "var(--font-mono)",
-                        fontWeight: 700,
-                        color: log.delta > 0 ? "#34d399" : "#f43f5e",
-                      }}
-                    >
-                      {log.delta > 0 ? `+${log.delta}` : log.delta} pts
-                    </td>
-                    <td style={{ fontFamily: "var(--font-mono)", fontSize: "0.82rem" }}>
-                      {log.previousScore} → <strong>{log.newScore}</strong>
-                    </td>
-                    <td style={{ fontSize: "0.85rem" }}>
-                      {log.bountyId ? (
-                        <Link href={`/bounties/${log.bountyId}`} style={{ color: "var(--accent-cyan)" }}>
-                          {log.bountyTitle || log.bountyId}
-                        </Link>
-                      ) : (
-                        <span style={{ color: "var(--text-dim)" }}>Protocol Core</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            {profile.reputationLogs?.map((log: any) => (
+              <div
+                key={log.id}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "0.6rem 0",
+                  borderBottom: "1px solid #e4e4e7",
+                  fontSize: "0.82rem",
+                  fontFamily: "var(--font-mono)",
+                }}
+              >
+                <div>
+                  <span style={{ fontWeight: 800, color: "#000000" }}>{log.reason}</span>
+                  <div style={{ fontSize: "0.72rem", color: "#52525b" }}>
+                    {new Date(log.timestamp).toLocaleString()}
+                  </div>
+                </div>
+
+                <div style={{ textAlign: "right" }}>
+                  <span
+                    style={{
+                      fontWeight: 800,
+                      color: "#000000",
+                    }}
+                  >
+                    {log.delta > 0 ? `+${log.delta}` : log.delta} pts
+                  </span>
+                  <div style={{ fontSize: "0.72rem", color: "#52525b" }}>
+                    New Score: {log.newScore}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

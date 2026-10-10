@@ -1,57 +1,49 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 
-export default function ActivityPage() {
+export default function ActivityStreamPage() {
   const [events, setEvents] = useState<any[]>([]);
-  const [eventTypeFilter, setEventTypeFilter] = useState("ALL");
   const [loading, setLoading] = useState(true);
-
-  // 1. Fetch historical audit logs
-  const fetchHistorical = async () => {
-    try {
-      const url = eventTypeFilter === "ALL"
-        ? "/api/events/history?limit=40"
-        : `/api/events/history?eventType=${eventTypeFilter}&limit=40`;
-      const res = await fetch(url);
-      const data = await res.json();
-      if (data.success) {
-        setEvents(data.data.events || []);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [eventTypeFilter, setEventTypeFilter] = useState("ALL");
 
   useEffect(() => {
-    fetchHistorical();
+    // 1. Fetch initial event history
+    fetch("/api/events/history?limit=100")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success) {
+          setEvents(data.data.events || []);
+        }
+      })
+      .finally(() => setLoading(false));
 
-    // 2. Connect to live SSE stream
+    // 2. Connect to live SSE Event Stream
     if (typeof EventSource !== "undefined") {
       const source = new EventSource("/api/events");
       source.onmessage = (msg) => {
         try {
           const evt = JSON.parse(msg.data);
-          if (eventTypeFilter === "ALL" || evt.type === eventTypeFilter) {
-            setEvents((prev) => [evt, ...prev.slice(0, 50)]);
-          }
+          setEvents((prev) => [evt, ...prev.slice(0, 99)]);
         } catch {}
       };
       return () => source.close();
     }
-  }, [eventTypeFilter]);
+  }, []);
+
+  const filteredEvents = events.filter((evt) => {
+    if (eventTypeFilter === "ALL") return true;
+    return evt.eventType === eventTypeFilter || evt.type === eventTypeFilter;
+  });
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.75rem" }}>
+    <div className="container-constrained" style={{ display: "flex", flexDirection: "column", gap: "1.75rem" }}>
       <div>
-        <h1 style={{ fontSize: "1.8rem", fontWeight: 800, color: "#ffffff" }}>
-          Protocol Activity & Audit Log
+        <h1 style={{ fontSize: "1.8rem", fontWeight: 900, color: "#000000" }}>
+          Protocol Activity Log
         </h1>
-        <p style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>
-          Real-time Server-Sent Events (SSE) telemetry and immutable protocol audit logs across the Accord Agora.
+        <p style={{ color: "#52525b", fontSize: "0.88rem" }}>
+          Audit trail of protocol events, escrow transactions, and state changes.
         </p>
       </div>
 
@@ -75,8 +67,9 @@ export default function ActivityPage() {
               fontSize: "0.75rem",
               fontFamily: "var(--font-mono)",
               padding: "0.35rem 0.7rem",
-              background: eventTypeFilter === type ? "var(--accent-cyan)" : "var(--bg-muted)",
-              color: eventTypeFilter === type ? "#080b11" : "var(--text-main)",
+              background: eventTypeFilter === type ? "#000000" : "#ffffff",
+              color: eventTypeFilter === type ? "#ffffff" : "#000000",
+              borderColor: "#000000",
             }}
           >
             {type}
@@ -86,35 +79,28 @@ export default function ActivityPage() {
 
       {/* Events Stream Feed */}
       {loading ? (
-        <div style={{ color: "var(--text-dim)", padding: "3rem", textAlign: "center" }}>
-          Loading protocol activity...
+        <div style={{ color: "#52525b", padding: "3rem", textAlign: "center", fontFamily: "var(--font-mono)" }}>
+          Loading activity stream...
         </div>
-      ) : events.length === 0 ? (
-        <div className="card" style={{ textAlign: "center", padding: "3rem", color: "var(--text-dim)" }}>
+      ) : filteredEvents.length === 0 ? (
+        <div className="card" style={{ textAlign: "center", padding: "3rem", color: "#52525b" }}>
           No events recorded matching filter.
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-          {events.map((evt, idx) => (
+          {filteredEvents.map((evt, idx) => (
             <div
               key={evt.id || idx}
               className="card"
               style={{
-                padding: "0.9rem 1.25rem",
+                padding: "0.85rem 1.15rem",
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
                 flexWrap: "wrap",
                 gap: "1rem",
-                borderLeft: `3px solid ${
-                  evt.eventType?.includes("settled") || evt.type?.includes("settled")
-                    ? "#34d399"
-                    : evt.eventType?.includes("verification") || evt.type?.includes("verification")
-                    ? "#38bdf8"
-                    : evt.eventType?.includes("reputation") || evt.type?.includes("reputation")
-                    ? "#c084fc"
-                    : "var(--border-active)"
-                }`,
+                border: "1px solid #000000",
+                boxShadow: "2px 2px 0px #000000",
               }}
             >
               <div>
@@ -122,36 +108,40 @@ export default function ActivityPage() {
                   <span
                     style={{
                       fontFamily: "var(--font-mono)",
-                      fontWeight: 700,
-                      fontSize: "0.88rem",
-                      color: "#f8fafc",
+                      fontWeight: 800,
+                      fontSize: "0.85rem",
+                      color: "#000000",
                     }}
                   >
                     {evt.eventType || evt.type}
                   </span>
-                  <span style={{ fontSize: "0.75rem", color: "var(--text-dim)", fontFamily: "var(--font-mono)" }}>
+                  <span style={{ fontSize: "0.72rem", color: "#52525b", fontFamily: "var(--font-mono)" }}>
                     ID: {evt.id}
                   </span>
                 </div>
 
                 <div
                   style={{
-                    fontSize: "0.82rem",
-                    color: "var(--text-muted)",
+                    fontSize: "0.8rem",
+                    color: "#52525b",
+                    marginTop: "0.2rem",
                     fontFamily: "var(--font-mono)",
-                    marginTop: "0.25rem",
-                    maxHeight: "60px",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
                   }}
                 >
-                  {typeof evt.payload === "string" ? evt.payload : JSON.stringify(evt.payload || {})}
+                  Target: <strong>{evt.entityType}</strong> // {evt.entityId}
                 </div>
               </div>
 
-              <div style={{ textAlign: "right", fontFamily: "var(--font-mono)", fontSize: "0.75rem", color: "var(--text-dim)" }}>
-                {new Date(evt.createdAt || evt.timestamp || Date.now()).toLocaleTimeString()}
-                <div>{new Date(evt.createdAt || evt.timestamp || Date.now()).toLocaleDateString()}</div>
+              <div
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "0.75rem",
+                  color: "#000000",
+                  textAlign: "right",
+                  fontWeight: 600,
+                }}
+              >
+                {new Date(evt.timestamp).toLocaleTimeString()}
               </div>
             </div>
           ))}

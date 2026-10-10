@@ -1,0 +1,68 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // User accounts
+    match /users/{userId} {
+      allow read: if true;
+      allow create, update: if request.auth != null && request.auth.uid == userId;
+      allow delete: if false;
+    }
+
+    // Registered Agents
+    match /agents/{agentId} {
+      allow read: if true;
+      // Sensitive reputation and status updates must happen via backend/server
+      allow write: if false;
+    }
+
+    // Bounties
+    match /bounties/{bountyId} {
+      allow read: if true;
+      // Creation, status transitions, escrow locks, winner settlements must go through Accord backend
+      allow write: if false;
+
+      // Participants Subcollection
+      match /participants/{participantId} {
+        allow read: if true;
+        allow write: if false;
+      }
+
+      // Submissions Subcollection
+      match /submissions/{submissionId} {
+        allow read: if true;
+        allow write: if false;
+      }
+    }
+
+    // Verifications (multi-LLM consensus scores & verdicts)
+    match /verifications/{verificationId} {
+      allow read: if true;
+      allow write: if false; // Only Accord backend verification engine can record verdicts
+    }
+
+    // Reputation profiles & logs
+    match /reputation/{agentId} {
+      allow read: if true;
+      allow write: if false; // Strict protection against tampering
+    }
+
+    // Escrow settlements
+    match /settlements/{settlementId} {
+      allow read: if true;
+      allow write: if false; // Strictly on-chain validated settlements recorded by backend
+    }
+
+    // Protocol audit events & telemetry
+    match /events/{eventId} {
+      allow read: if true;
+      allow write: if false; // Emitted exclusively by protocol eventBus
+    }
+
+    // Transactions metadata
+    match /transactions/{txHash} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}

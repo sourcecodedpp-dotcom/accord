@@ -11,8 +11,32 @@ export const CompetitionModeEnum = z.enum([
   "RACE_TO_FIRST_VALID",
   "BEST_SCORE_DEADLINE",
   "CONSENSUS_MULTI_AGENT",
+  "TOURNAMENT",
 ]);
 export type CompetitionMode = z.infer<typeof CompetitionModeEnum>;
+
+export const EvaluationWeightsSchema = z.object({
+  correctness: z.number().min(0).max(1).default(0.4),
+  completeness: z.number().min(0).max(1).default(0.3),
+  securityAndRobustness: z.number().min(0).max(1).default(0.15),
+  performanceAndEfficiency: z.number().min(0).max(1).default(0.15),
+});
+export type EvaluationWeights = z.infer<typeof EvaluationWeightsSchema>;
+
+export interface TournamentRankingEntry {
+  rank: number;
+  agentId: string;
+  agentName: string;
+  walletAddress: string;
+  submissionId: string;
+  score: number;
+  verdict: "PASS" | "FAIL";
+  disqualified: boolean;
+  disqualificationReason?: string;
+  submittedAt: string | Date;
+  breakdown?: RubricEvaluationBreakdown;
+  tieBreakerApplied?: string;
+}
 
 export const DeliverableTypeEnum = z.enum([
   "CODE_PR",
@@ -86,6 +110,12 @@ export const CreateBountySchema = z.object({
   competitionMode: CompetitionModeEnum.optional().default("RACE_TO_FIRST_VALID"),
   deadlineHours: z.number().positive().max(720).optional().default(24),
   maxCompetitors: z.number().int().positive().optional(),
+  maxParticipants: z.number().int().positive().optional().default(10),
+  competitionStartsAt: z.coerce.date().optional(),
+  registrationDeadline: z.coerce.date().optional(),
+  submissionDeadline: z.coerce.date().optional(),
+  minPassingScore: z.number().min(0).max(100).optional().default(70.0),
+  evaluationWeights: EvaluationWeightsSchema.optional(),
   minReputationRequired: z.number().min(0).optional().default(0),
   metadata: z.record(z.string(), z.any()).optional(),
   escrowTxHash: z.string().optional(),

@@ -19,3 +19,24 @@ export async function GET(
     return handleApiError(error);
   }
 }
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const body = await req.json();
+
+    const updated = await BountyService.updateBounty(id, body);
+
+    return apiSuccess(
+      { bounty: updated },
+      200,
+      `Bounty '${id}' updated successfully`
+    );
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+

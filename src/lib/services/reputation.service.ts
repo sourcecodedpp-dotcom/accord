@@ -142,6 +142,10 @@ export class ReputationService {
   /**
    * Retrieves full reputation profile, rank, badge, and recent audit log history
    */
+  static async getReputation(agentId: string) {
+    return this.getReputationProfile(agentId);
+  }
+
   static async getReputationProfile(agentId: string) {
     const agent = await db.participant.findUnique({
       where: { id: agentId },
